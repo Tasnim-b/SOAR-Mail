@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOAR-Mail - Connexion</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #4361ee;
+            --primary-dark: #3a56d4;
+            --secondary: #7209b7;
+            --danger: #f72585;
+            --success: #4cc9f0;
+            --dark: #212529;
+            --light: #f8f9fa;
+            --gray: #6c757d;
+            --border-radius: 12px;
+            --box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+        }
+        
+        .login-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            padding: 40px;
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+        
+        .login-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .logo {
+            margin-bottom: 30px;
+        }
+        
+        .logo i {
+            font-size: 48px;
+            color: var(--primary);
+            margin-bottom: 15px;
+        }
+        
+        .logo h1 {
+            color: var(--dark);
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+        
+        .logo p {
+            color: var(--gray);
+            font-size: 14px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--dark);
+            font-weight: 500;
+        }
+        
+        .input-with-icon {
+            position: relative;
+        }
+        
+        .input-with-icon i {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--gray);
+        }
+        
+        .input-with-icon input {
+            width: 100%;
+            padding: 14px 14px 14px 45px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .input-with-icon input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        .btn-login {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(to right, var(--primary), var(--secondary));
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+        
+        .btn-login:hover {
+            background: linear-gradient(to right, var(--primary-dark), #5a08a1);
+            box-shadow: 0 5px 15px rgba(67, 97, 238, 0.4);
+        }
+        
+        .btn-login:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .alert {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+        
+        .alert-error {
+            background-color: #fee;
+            border: 1px solid #fcc;
+            color: #c00;
+        }
+        
+        .alert-success {
+            background-color: #efe;
+            border: 1px solid #cfc;
+            color: #0c0;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .security-info {
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            font-size: 12px;
+            color: var(--gray);
+        }
+        
+        .security-info i {
+            color: var(--success);
+            margin-right: 5px;
+        }
+        
+        @media (max-width: 480px) {
+            .login-card {
+                padding: 30px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <h1>SOAR-Mail</h1>
+                <p>Plateforme de sécurité des emails</p>
+            </div>
+            
+            <div id="alertMessage" class="alert"></div>
+            
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="email">Adresse Email</label>
+                    <div class="input-with-icon">
+                        <i class="fas fa-envelope"></i>
+                        <input type="email" 
+                               id="email" 
+                               name="email" 
+                               required 
+                               autocomplete="email"
+                               autofocus
+                               placeholder="admin@entreprise.com">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Mot de passe</label>
+                    <div class="input-with-icon">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" 
+                               id="password" 
+                               name="password" 
+                               required 
+                               autocomplete="current-password"
+                               placeholder="••••••••">
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn-login" id="loginButton">
+                    <span id="buttonText">Se connecter</span>
+                    <span id="buttonLoading" class="loading" style="display:none;"></span>
+                </button>
+            </form>
+            
+            <div class="security-info">
+                <p><i class="fas fa-lock"></i> Authentification sécurisée avec JWT</p>
+                <p><i class="fas fa-server"></i> Accès restreint au personnel autorisé</p>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const loginForm = document.getElementById('loginForm');
+            const alertMessage = document.getElementById('alertMessage');
+            const loginButton = document.getElementById('loginButton');
+            const buttonText = document.getElementById('buttonText');
+            const buttonLoading = document.getElementById('buttonLoading');
+            
+            // NOTE: Ne pas rediriger automatiquement vers le dashboard ici.
+            // La page de login doit rester la première vue affichée. La
+            // redirection vers `/dashboard/` se produit uniquement après
+            // une connexion réussie (dans le handler du formulaire).
+            
+            loginForm.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                // Récupérer les valeurs du formulaire
+                const email = document.getElementById('email').value.trim();
+                const password = document.getElementById('password').value;
+                
+                // Validation simple
+                if (!email || !password) {
+                    showAlert('Veuillez remplir tous les champs', 'error');
+                    return;
+                }
+                
+                // Désactiver le bouton et afficher le loading
+                loginButton.disabled = true;
+                buttonText.textContent = 'Connexion en cours...';
+                buttonLoading.style.display = 'inline-block';
+                
+                try {
+                    // Envoyer la requête à l'API JWT
+                    const response = await fetch('/api/token/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            email: email,
+                            password: password
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        // Stocker les tokens (en production, utilisez des cookies HTTP-only)
+                        localStorage.setItem('access_token', data.access);
+                        localStorage.setItem('refresh_token', data.refresh);
+                        
+                        showAlert('Connexion réussie ! Redirection...', 'success');
+                        
+                        // Rediriger vers le dashboard après un court délai
+                        setTimeout(() => {
+                            window.location.href = '/dashboard/';
+                        }, 1000);
+                    } else {
+                        // Afficher l'erreur
+                        const errorMsg = data.detail || 'Email ou mot de passe incorrect';
+                        showAlert(errorMsg, 'error');
+                        
+                        // Réactiver le bouton
+                        resetButton();
+                    }
+                } catch (error) {
+                    console.error('Erreur:', error);
+                    showAlert('Erreur de connexion au serveur', 'error');
+                    resetButton();
+                }
+            });
+            
+            function showAlert(message, type) {
+                alertMessage.textContent = message;
+                alertMessage.className = 'alert alert-' + type;
+                alertMessage.style.display = 'block';
+                
+                // Masquer l'alerte après 5 secondes
+                setTimeout(() => {
+                    alertMessage.style.display = 'none';
+                }, 5000);
+            }
+            
+            function resetButton() {
+                loginButton.disabled = false;
+                buttonText.textContent = 'Se connecter';
+                buttonLoading.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

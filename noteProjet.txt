@@ -1,0 +1,95 @@
+Architecture technique proposée (haut niveau)
+
+Backend : Django (views, ORM, admin).
+
+Asynchrone : Celery (worker), Broker : Redis (ou RabbitMQ).
+
+Database : sqlite3 (conforme à la consigne).
+
+IMAP : imaplib + email (pour parser) ou bibliothèque plus haut-niveau si tu veux.
+
+Détection : implémentation de règles et fonctions heuristiques (Python). Possibilité d’ajouter librairies (virus scan, momentum).
+
+Frontend : templates Django + JS léger pour dashboard (charts).
+
+Logs : table IncidentLog + fichier de log.
+
+APIs externes : requests.
+
+
+Exemples de playbooks utiles à implémenter (idées)
+
+Playbook Phishing élevé
+
+Condition : incident_type == 'phishing' and score > 0.8
+
+Actions : quarantine_email → notify_analyst → create_ticket → add_sender_to_watchlist
+
+Playbook Spam massif
+
+Condition : incident_type == 'spam' and score > 0.9
+
+Actions : move_to_spam_folder → mark_as_read → log_action
+
+Playbook pièce jointe suspecte
+
+Condition : has_suspicious_attachment == True
+
+Actions : save_attachment → send_to_antivirus_scan → notify_admin
+
+
+
+
+
+D. Tableau de Bord
+Page principale avec :
+
+Nombre d'emails analysés aujourd'hui
+
+Nombre de menaces détectées (par type)
+
+Liste des derniers incidents
+
+Graphiques simples (Chart.js ou Django-charts)
+
+
+
+E. Journalisation & Rapports
+Table IncidentLog qui enregistre :
+
+Date/heure
+
+Email concerné
+
+Menace détectée
+
+Playbook exécuté
+
+Actions réalisées
+
+Page pour exporter les logs en CSV
+
+
+
+
+Conseil final : Commencez par le plus simple - une application Django qui peut se connecter à une boîte mail test et afficher les emails. Ajoutez ensuite l'analyse, puis les playbooks.
+
+
+
+Se connecte à une boîte mail test via IMAP
+
+Récupère les emails et les stocke dans la base de données
+
+Analyse les menaces avec des règles simples
+
+Affiche les résultats dans ton Dashboard
+
+
+mdp de application:yajoatqwadkrvhf
+
+Ce score est calculé en additionnant différents signaux détectés dans :
+✔ le sujet
+✔ le corps
+✔ l’expéditeur
+✔ les pièces jointes
+✔ les liens URL
