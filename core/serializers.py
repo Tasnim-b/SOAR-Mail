@@ -53,7 +53,7 @@ class EmailMessageSerializer(serializers.ModelSerializer):
             'subject', 'received_date', 'formatted_date', 'size',
             'threat_level', 'threat_type', 'risk_score', 'threat_status',
             'analysis_summary', 'has_attachments', 'is_read', 'is_encrypted',
-            'analyzed', 'analysis_date'
+            'analyzed', 'analysis_date','body_text', 'body_html'
         ]
     
     def get_threat_status(self, obj):
@@ -83,3 +83,41 @@ class EmailMessageSerializer(serializers.ModelSerializer):
     def get_formatted_date(self, obj):
         """Formater la date pour l'affichage"""
         return obj.received_date.strftime('%Y-%m-%d %H:%M')
+    
+    def get_preview(self, obj):
+        """Créer un aperçu du contenu de l'email"""
+        text = obj.body_text or obj.body_html
+        if text:
+            # Nettoyer le HTML si présent
+            import re
+            clean_text = re.sub(r'<[^>]+>', '', text)
+            clean_text = re.sub(r'\s+', ' ', clean_text)
+            return (clean_text[:100] + '...') if len(clean_text) > 100 else clean_text
+        return "Aucun contenu"
+    
+
+    def get_sender_info(self, obj):
+        """Formater les informations de l'expéditeur pour le frontend"""
+        return {
+            'name': obj.sender_name or obj.sender.split('@')[0],
+            'email': obj.sender
+        }
+  
+    
+    def _get_reputation_text(self, risk_score):
+        """Convertir le score de risque en texte de réputation"""
+        if risk_score <= 20:
+            return 'very_high'
+        elif risk_score <= 40:
+            return 'high'
+        elif risk_score <= 60:
+            return 'medium'
+        elif risk_score <= 80:
+            return 'low'
+        else:
+            return 'very_low'
+         
+
+
+
+

@@ -681,6 +681,22 @@
             font-weight: 600;
         }
         
+        /* Loading Spinner */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(67, 97, 238, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 1s ease-in-out infinite;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
         /* Responsive */
         @media (max-width: 992px) {
             .sidebar {
@@ -930,9 +946,9 @@
             // Variables globales
             let currentPage = 1;
             let totalPages = 1;
+            let totalCount = 0;
             let emailsPerPage = 10;
             let currentEmails = [];
-            let filteredEmails = [];
             
             // Vérifier si l'utilisateur est connecté
             const accessToken = localStorage.getItem('access_token');
@@ -955,6 +971,7 @@
                 }
             } catch (e) {
                 console.error('Erreur de décodage du token:', e);
+                userEmailElement.textContent = 'Utilisateur';
             }
             
             // Charger les données des emails
@@ -966,6 +983,7 @@
             });
             
             refreshButton.addEventListener('click', function() {
+                currentPage = 1;
                 loadEmailsData();
             });
             
@@ -984,56 +1002,72 @@
                 }
             });
             
-            // Filtres
-            filterStatus.addEventListener('change', applyFilters);
-            filterDate.addEventListener('change', applyFilters);
-            filterSender.addEventListener('input', applyFilters);
-            filterSubject.addEventListener('input', applyFilters);
+            // Filtres - recharger les données quand les filtres changent
+            filterStatus.addEventListener('change', function() {
+                currentPage = 1;
+                loadEmailsData();
+            });
             
-            // Fonction pour charger les données des emails
-          
+            filterDate.addEventListener('change', function() {
+                currentPage = 1;
+                loadEmailsData();
+            });
+            
+            filterSender.addEventListener('input', debounce(function() {
+                currentPage = 1;
+                loadEmailsData();
+            }, 500));
+            
+            filterSubject.addEventListener('input', debounce(function() {
+                currentPage = 1;
+                loadEmailsData();
+            }, 500));
+            
+            // Fonction pour charger les données des emails depuis l'API
+            async function loadEmailsData() {
+                try {
+                    showLoadingState(true);
                     
- async function loadEmailsData() {
-    try {
-        showLoadingState(true);
-        
-        // Construire les paramètres de filtre
-        const params = new URLSearchParams();
-        
-        // Convertir le filtre de statut pour l'API
-        const statusFilter = filterStatus.value;
-        if (statusFilter !== 'all') {
-            params.append('threat_status', statusFilter);
-        }
-        
-        // Ajouter le filtre de date
-        const dateFilter = filterDate.value;
-        if (dateFilter !== 'all') {
-            params.append('date_filter', dateFilter);
-        }
-        
-        // Ajouter le filtre d'expéditeur
-        const senderFilter = filterSender.value;
-        if (senderFilter) {
-            params.append('sender', senderFilter);
-        }
-        
-        // Ajouter le filtre de sujet
-        const subjectFilter = filterSubject.value;
-        if (subjectFilter) {
-            params.append('search', subjectFilter);
-        }
-        
-        // Ajouter la pagination
-        params.append('page', currentPage);
-        
-        const url = `/api/emails/?${params.toString()}`;
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Authorization': 'Bearer ' + accessToken
-            }
-        });
+                    // Construire les paramètres de filtre
+                    const params = new URLSearchParams();
+                    
+                    // Convertir le filtre de statut pour l'API
+                    const statusFilter = filterStatus.value;
+                    if (statusFilter !== 'all') {
+                        params.append('threat_status', statusFilter);
+                    }
+                    
+                    // Ajouter le filtre de date
+                    const dateFilter = filterDate.value;
+                    if (dateFilter !== 'all') {
+                        params.append('date_filter', dateFilter);
+                    }
+                    
+                    // Ajouter le filtre d'expéditeur
+                    const senderFilter = filterSender.value;
+                    if (senderFilter) {
+                        params.append('sender', senderFilter);
+                    }
+                    
+                    // Ajouter le filtre de sujet
+                    const subjectFilter = filterSubject.value;
+                    if (subjectFilter) {
+                        params.append('search', subjectFilter);
+                    }
+                    
+                    // Ajouter la pagination
+                    params.append('page', currentPage);
+                    
+                    const url = `/api/emails/?${params.toString()}`;
+                    console.log('Chargement depuis:', url); // Debug
+                    
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': 'Bearer ' + accessToken,
+                            'Content-Type': 'application/json'
+                        }
+                    });
                     
                     if (response.status === 401) {
                         // Token expiré, essayer de le rafraîchir
@@ -1051,270 +1085,223 @@
                     }
                     
                     if (!response.ok) {
-                        throw new Error('Erreur lors du chargement des emails');
+                        const errorText = await response.text();
+                        console.error('Erreur API:', errorText);
+                        throw new Error(`Erreur ${response.status}: ${errorText}`);
                     }
                     
                     const data = await response.json();
+                    console.log('Données reçues:', data); // Debug
                     
-                    // Stocker les emails
-                    currentEmails = data.emails || [];
+                    // Vérifier la structure des données
+                    if (data.results) {
+                        // DRF paginé standard: results peut être un tableau
+                        if (Array.isArray(data.results)) {
+                            currentEmails = data.results;
+                        } else if (data.results.emails && Array.isArray(data.results.emails)) {
+                            // Ancienne variation: results = { stats, emails: [...] }
+                            currentEmails = data.results.emails;
+                            // si les stats sont fournies dans results
+                            if (data.results.stats) {
+                                updateStatsFromData(data.results.stats);
+                            }
+                        } else {
+                            // Inattendu: assurer un tableau
+                            currentEmails = [];
+                        }
+
+                        totalCount = typeof data.count === 'number' ? data.count : (Array.isArray(currentEmails) ? currentEmails.length : 0);
+                        totalPages = Math.ceil(totalCount / emailsPerPage) || 1;
+
+                        // Mettre à jour les statistiques si disponibles
+                        if (data.stats) {
+                            updateStatsFromData(data.stats);
+                        } else if (!data.results.stats && Array.isArray(currentEmails)) {
+                            updateStatsFromEmails(currentEmails);
+                        }
+                    } else if (data.emails) {
+                        // Structure non paginée
+                        currentEmails = Array.isArray(data.emails) ? data.emails : [];
+                        totalCount = currentEmails.length;
+                        totalPages = Math.ceil(totalCount / emailsPerPage) || 1;
+
+                        // Mettre à jour les statistiques
+                        if (data.stats) {
+                            updateStatsFromData(data.stats);
+                        } else {
+                            updateStatsFromEmails(currentEmails);
+                        }
+                    } else {
+                        // Structure inconnue, essayer de traiter data comme un tableau
+                        currentEmails = Array.isArray(data) ? data : [];
+                        totalCount = currentEmails.length;
+                        totalPages = Math.ceil(totalCount / emailsPerPage) || 1;
+                        updateStatsFromEmails(currentEmails);
+                    }
                     
-                    // Mettre à jour les compteurs
-                    updateStatsCounters();
+                    // Afficher les emails
+                    renderEmailsForPage();
                     
-                    // Appliquer les filtres
-                    applyFilters();
-                    
-                    showAlert('Données des emails mises à jour', 'success');
+                    // Mettre à jour la pagination
+                    renderPagination();
                     
                 } catch (error) {
-                    console.error('Erreur:', error);
+                    console.error('Erreur détaillée:', error);
                     
-                    // Charger des données de démonstration si l'API n'est pas disponible
+                    // Charger des données de démonstration uniquement si l'API échoue
                     loadDemoData();
-                    
-                    showAlert('Utilisation des données de démonstration', 'warning');
+                    showAlert('Utilisation des données de démonstration (API non disponible)', 'warning');
                 } finally {
                     showLoadingState(false);
                 }
             }
             
-            // Fonction pour charger des données de démonstration
-            function loadDemoData() {
-                currentEmails = [
-                    {
-                        id: 1,
-                        sender: { name: "Amazon Security", email: "security@amazon.com" },
-                        subject: "Vérification de compte requise",
-                        preview: "Cher client, nous avons détecté une activité suspecte sur votre compte Amazon...",
-                        date: "2023-10-15 14:30",
-                        threatStatus: "malicious",
-                        threatScore: 95,
-                        analysis: { phishing: true, malware: false, spam: false, reputation: "low" },
-                        body: "Cher client,\n\nNous avons détecté une activité suspecte sur votre compte Amazon. Pour protéger votre compte, veuillez cliquer sur le lien ci-dessous pour vérifier vos informations.\n\nhttps://fake-amazon-verification.com\n\nCordialement,\nL'équipe de sécurité Amazon"
-                    },
-                    {
-                        id: 2,
-                        sender: { name: "GitHub", email: "noreply@github.com" },
-                        subject: "Nouvelle connexion détectée",
-                        preview: "Une nouvelle connexion a été détectée sur votre compte GitHub...",
-                        date: "2023-10-15 11:15",
-                        threatStatus: "safe",
-                        threatScore: 10,
-                        analysis: { phishing: false, malware: false, spam: false, reputation: "high" },
-                        body: "Bonjour,\n\nUne nouvelle connexion a été détectée sur votre compte GitHub.\n\n• Date: 15 Oct 2023, 11:15 UTC\n• Adresse IP: 192.168.1.1\n• Emplacement: Paris, France\n\nSi c'était vous, vous pouvez ignorer cet email. Sinon, veuillez sécuriser votre compte immédiatement.\n\nL'équipe GitHub"
-                    },
-                    {
-                        id: 3,
-                        sender: { name: "Banque Nationale", email: "alertes@banque-nationale.fr" },
-                        subject: "Alerte de sécurité : transaction non autorisée",
-                        preview: "Une transaction non autorisée a été détectée sur votre compte...",
-                        date: "2023-10-15 09:45",
-                        threatStatus: "suspicious",
-                        threatScore: 65,
-                        analysis: { phishing: true, malware: false, spam: true, reputation: "medium" },
-                        body: "Cher client,\n\nUne transaction non autorisée de 1 250€ a été détectée sur votre compte.\n\nSi vous n'avez pas effectué cette transaction, veuillez contacter notre service client immédiatement au 01 23 45 67 89.\n\nPour des raisons de sécurité, nous vous recommandons de changer votre mot de passe.\n\nCordialement,\nLe service sécurité de la Banque Nationale"
-                    },
-                    {
-                        id: 4,
-                        sender: { name: "Microsoft Support", email: "support@microsoft-verify.com" },
-                        subject: "Votre compte a été compromis",
-                        preview: "Nous avons détecté une tentative de connexion suspecte à votre compte Microsoft...",
-                        date: "2023-10-14 16:20",
-                        threatStatus: "malicious",
-                        threatScore: 90,
-                        analysis: { phishing: true, malware: true, spam: true, reputation: "very_low" },
-                        body: "Cher utilisateur,\n\nNous avons détecté une tentative de connexion suspecte à votre compte Microsoft depuis un nouvel appareil.\n\nPour protéger votre compte, veuillez vérifier votre identité en cliquant sur le lien ci-dessous :\n\nhttp://microsoft-security-verification.xyz\n\nSi vous ignorez cet email, votre compte pourrait être suspendu.\n\nCordialement,\nL'équipe de sécurité Microsoft"
-                    },
-                    {
-                        id: 5,
-                        sender: { name: "LinkedIn", email: "connected@linkedin.com" },
-                        subject: "Vous avez une nouvelle demande de connexion",
-                        preview: "John Doe souhaite vous connecter sur LinkedIn...",
-                        date: "2023-10-14 14:10",
-                        threatStatus: "safe",
-                        threatScore: 5,
-                        analysis: { phishing: false, malware: false, spam: false, reputation: "high" },
-                        body: "Bonjour,\n\nJohn Doe souhaite vous connecter sur LinkedIn.\n\n• Titre: Senior Developer chez TechCorp\n• Région: San Francisco Bay Area\n• 500+ connexions\n\nPour accepter ou ignorer cette demande, connectez-vous à votre compte LinkedIn.\n\nCordialement,\nL'équipe LinkedIn"
-                    },
-                    {
-                        id: 6,
-                        sender: { name: "Service Client PayPal", email: "service@paypal-security.com" },
-                        subject: "Action requise : vérification de compte",
-                        preview: "Nous avons temporairement limité votre compte PayPal pour des raisons de sécurité...",
-                        date: "2023-10-14 10:05",
-                        threatStatus: "suspicious",
-                        threatScore: 75,
-                        analysis: { phishing: true, malware: false, spam: true, reputation: "low" },
-                        body: "Cher membre PayPal,\n\nNous avons temporairement limité votre compte pour des raisons de sécurité.\n\nPour restaurer l'accès à votre compte, vous devez vérifier vos informations en cliquant sur le lien ci-dessous :\n\nhttps://paypal-verification-secure.com\n\nVous avez 24 heures pour compléter cette vérification.\n\nCordialement,\nL'équipe de sécurité PayPal"
-                    },
-                    {
-                        id: 7,
-                        sender: { name: "Dropbox", email: "no-reply@dropbox.com" },
-                        subject: "Documents partagés avec vous",
-                        preview: "Vous avez reçu de nouveaux documents partagés sur Dropbox...",
-                        date: "2023-10-13 17:30",
-                        threatStatus: "safe",
-                        threatScore: 15,
-                        analysis: { phishing: false, malware: false, spam: false, reputation: "high" },
-                        body: "Bonjour,\n\nVous avez reçu de nouveaux documents partagés avec vous sur Dropbox.\n\n• Document_Projet_Final.pdf\n• Présentation_Client.pptx\n• Budget_2023.xlsx\n\nPour accéder à ces fichiers, connectez-vous à votre compte Dropbox.\n\nCordialement,\nL'équipe Dropbox"
-                    },
-                    {
-                        id: 8,
-                        sender: { name: "Netflix", email: "info@netflix-account.com" },
-                        subject: "Mise à jour des informations de paiement requise",
-                        preview: "Votre méthode de paiement a expiré. Mettez à jour vos informations pour continuer à regarder Netflix...",
-                        date: "2023-10-13 15:45",
-                        threatStatus: "malicious",
-                        threatScore: 85,
-                        analysis: { phishing: true, malware: false, spam: true, reputation: "low" },
-                        body: "Cher membre Netflix,\n\nVotre méthode de paiement a expiré. Pour éviter l'interruption de votre service, veuillez mettre à jour vos informations de paiement.\n\nCliquez ici pour mettre à jour vos informations :\n\nhttp://netflix-payment-update.biz\n\nSi vous avez des questions, contactez notre service client.\n\nCordialement,\nL'équipe Netflix"
-                    }
-                ];
-                
-                updateStatsCounters();
-                applyFilters();
+            // Fonction pour mettre à jour les statistiques depuis les données de l'API
+            function updateStatsFromData(stats) {
+                document.getElementById('safeCount').textContent = stats.safe || 0;
+                document.getElementById('suspiciousCount').textContent = stats.suspicious || 0;
+                document.getElementById('maliciousCount').textContent = stats.malicious || 0;
+                document.getElementById('totalEmails').textContent = stats.total || totalCount || 0;
             }
             
-            // Fonction pour mettre à jour les compteurs de statistiques
-            function updateStatsCounters() {
-                const safeCount = currentEmails.filter(email => email.threatStatus === 'safe').length;
-                const suspiciousCount = currentEmails.filter(email => email.threatStatus === 'suspicious').length;
-                const maliciousCount = currentEmails.filter(email => email.threatStatus === 'malicious').length;
+            // Fonction pour calculer les statistiques depuis les emails
+            function updateStatsFromEmails(emails) {
+                const safeCount = emails.filter(email => {
+                    const status = email.threat_status || (email.threat_level === 'SAFE' ? 'safe' : 
+                        (email.threat_level && ['LOW', 'MEDIUM'].includes(email.threat_level) ? 'suspicious' : 'malicious'));
+                    return status === 'safe';
+                }).length;
+                
+                const suspiciousCount = emails.filter(email => {
+                    const status = email.threat_status || (email.threat_level === 'SAFE' ? 'safe' : 
+                        (email.threat_level && ['LOW', 'MEDIUM'].includes(email.threat_level) ? 'suspicious' : 'malicious'));
+                    return status === 'suspicious';
+                }).length;
+                
+                const maliciousCount = emails.filter(email => {
+                    const status = email.threat_status || (email.threat_level === 'SAFE' ? 'safe' : 
+                        (email.threat_level && ['LOW', 'MEDIUM'].includes(email.threat_level) ? 'suspicious' : 'malicious'));
+                    return status === 'malicious';
+                }).length;
                 
                 document.getElementById('safeCount').textContent = safeCount;
                 document.getElementById('suspiciousCount').textContent = suspiciousCount;
                 document.getElementById('maliciousCount').textContent = maliciousCount;
+                document.getElementById('totalEmails').textContent = emails.length;
             }
             
-            // Fonction pour appliquer les filtres
-            function applyFilters() {
-                filteredEmails = [...currentEmails];
+            // Fonction pour charger des données de démonstration (fallback)
+            function loadDemoData() {
+                currentEmails = [];
+                totalCount = 0;
+                totalPages = 1;
                 
-                // Filtrer par statut
-                const statusFilter = filterStatus.value;
-                if (statusFilter !== 'all') {
-                    filteredEmails = filteredEmails.filter(email => email.threatStatus === statusFilter);
-                }
-                
-                // Filtrer par date
-                const dateFilter = filterDate.value;
-                if (dateFilter !== 'all') {
-                    const now = new Date();
-                    filteredEmails = filteredEmails.filter(email => {
-                        const emailDate = new Date(email.date);
-                        
-                        if (dateFilter === 'today') {
-                            return emailDate.toDateString() === now.toDateString();
-                        } else if (dateFilter === 'week') {
-                            const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-                            return emailDate >= weekAgo;
-                        } else if (dateFilter === 'month') {
-                            const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-                            return emailDate >= monthAgo;
-                        }
-                        return true;
-                    });
-                }
-                
-                // Filtrer par expéditeur
-                const senderFilter = filterSender.value.toLowerCase();
-                if (senderFilter) {
-                    filteredEmails = filteredEmails.filter(email => 
-                        email.sender.name.toLowerCase().includes(senderFilter) || 
-                        email.sender.email.toLowerCase().includes(senderFilter)
-                    );
-                }
-                
-                // Filtrer par sujet
-                const subjectFilter = filterSubject.value.toLowerCase();
-                if (subjectFilter) {
-                    filteredEmails = filteredEmails.filter(email => 
-                        email.subject.toLowerCase().includes(subjectFilter)
-                    );
-                }
-                
-                // Mettre à jour le compteur total
-                document.getElementById('totalEmails').textContent = filteredEmails.length;
-                
-                // Afficher la pagination
-                renderPagination();
-                
-                // Afficher les emails pour la page actuelle
+                updateStatsFromEmails(currentEmails);
                 renderEmailsForPage();
+                renderPagination();
             }
             
             // Fonction pour afficher les emails pour la page actuelle
-            function renderEmailsForPage() {
-                if (filteredEmails.length === 0) {
-                    emailsBody.innerHTML = '';
-                    noEmails.style.display = 'block';
-                    return;
-                }
-                
-                noEmails.style.display = 'none';
-                
-                // Calculer les indices pour la pagination
-                const startIndex = (currentPage - 1) * emailsPerPage;
-                const endIndex = Math.min(startIndex + emailsPerPage, filteredEmails.length);
-                const pageEmails = filteredEmails.slice(startIndex, endIndex);
-                
-                let html = '';
-                pageEmails.forEach(email => {
-                    // Déterminer la classe du badge de menace
-                    let threatClass = 'threat-safe';
-                    let threatText = 'Sûr';
-                    if (email.threatStatus === 'suspicious') {
-                        threatClass = 'threat-suspicious';
-                        threatText = 'Suspect';
-                    } else if (email.threatStatus === 'malicious') {
-                        threatClass = 'threat-malicious';
-                        threatText = 'Malveillant';
-                    }
-                    
-                    // Obtenir l'initiale de l'expéditeur
-                    const initial = email.sender.name.charAt(0).toUpperCase();
-                    
-                    html += `
-                    <tr>
-                        <td>
-                            <div class="email-sender">
-                                <div class="sender-avatar">${initial}</div>
-                                <div class="sender-info">
-                                    <div class="sender-name">${email.sender.name}</div>
-                                    <div class="sender-email">${email.sender.email}</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td>
-                            <div class="email-subject">${email.subject}</div>
-                            <div class="email-preview">${email.preview}</div>
-                        </td>
-                        <td>${email.date}</td>
-                        <td><span class="threat-badge ${threatClass}">${threatText} (${email.threatScore}%)</span></td>
-                        <td>${getAnalysisSummary(email.analysis)}</td>
-                        <td>
-                            <div class="action-buttons">
-                                <button class="action-btn view" onclick="viewEmailDetail(${email.id})" title="Voir les détails">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                                <button class="action-btn quarantine" onclick="quarantineEmail(${email.id})" title="Mettre en quarantaine">
-                                    <i class="fas fa-shield-alt"></i>
-                                </button>
-                                <button class="action-btn delete" onclick="deleteEmail(${email.id})" title="Supprimer">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                    `;
-                });
-                
-                emailsBody.innerHTML = html;
-            }
+           // Fonction pour afficher les emails pour la page actuelle
+function renderEmailsForPage() {
+    console.log('renderEmailsForPage appelée');
+    console.log('currentEmails:', currentEmails);
+    
+    if (!currentEmails || currentEmails.length === 0) {
+        console.log('Aucun email à afficher');
+        emailsBody.innerHTML = '';
+        noEmails.style.display = 'block';
+        return;
+    }
+    
+    console.log(`${currentEmails.length} emails à afficher`);
+    noEmails.style.display = 'none';
+    
+    let html = '';
+    currentEmails.forEach((email, index) => {
+        console.log(`Traitement email ${index + 1}:`, email);
+        
+        // Utiliser les données réelles de l'API
+        const senderName = email.sender_name || email.sender || 'Inconnu';
+        const senderEmail = email.sender || 'inconnu@example.com';
+        const initial = senderName.charAt(0).toUpperCase();
+        
+        // Utiliser threat_status qui est retourné par l'API
+        const threatStatus = email.threat_status || 'safe';
+        const threatScore = email.risk_score || 0;
+        
+        // Créer un preview à partir de body_text ou body_html
+        let previewText = "Aucun aperçu disponible";
+        if (email.body_text && email.body_text.trim() !== '') {
+            previewText = email.body_text.length > 100 ? 
+                email.body_text.substring(0, 100) + '...' : email.body_text;
+        } else if (email.body_html && email.body_html.trim() !== '') {
+            // Nettoyer le HTML pour le preview
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = email.body_html;
+            const textContent = tempDiv.textContent || tempDiv.innerText || '';
+            previewText = textContent.length > 100 ? 
+                textContent.substring(0, 100) + '...' : textContent;
+        }
+        
+        const date = email.formatted_date || 'Date inconnue';
+        const subject = email.subject || 'Sans objet';
+        const analysisSummary = email.analysis_summary || 'Aucune analyse disponible';
+        
+        // Déterminer la classe du badge de menace
+        let threatClass = 'threat-safe';
+        let threatText = 'Sûr';
+        if (threatStatus === 'suspicious') {
+            threatClass = 'threat-suspicious';
+            threatText = 'Suspect';
+        } else if (threatStatus === 'malicious') {
+            threatClass = 'threat-malicious';
+            threatText = 'Malveillant';
+        }
+        
+        html += `
+        <tr>
+            <td>
+                <div class="email-sender">
+                    <div class="sender-avatar">${initial}</div>
+                    <div class="sender-info">
+                        <div class="sender-name">${escapeHtml(senderName)}</div>
+                        <div class="sender-email">${escapeHtml(senderEmail)}</div>
+                    </div>
+                </div>
+            </td>
+            <td>
+                <div class="email-subject">${escapeHtml(subject)}</div>
+                <div class="email-preview">${escapeHtml(previewText)}</div>
+            </td>
+            <td>${date}</td>
+            <td><span class="threat-badge ${threatClass}">${threatText} (${threatScore}%)</span></td>
+            <td>${escapeHtml(analysisSummary)}</td>
+            <td>
+                <div class="action-buttons">
+                    <button class="action-btn view" onclick="viewEmailDetail(${email.id})" title="Voir les détails">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    <button class="action-btn quarantine" onclick="quarantineEmail(${email.id})" title="Mettre en quarantaine">
+                        <i class="fas fa-shield-alt"></i>
+                    </button>
+                    <button class="action-btn delete" onclick="deleteEmail(${email.id})" title="Supprimer">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+        `;
+    });
+    
+    emailsBody.innerHTML = html;
+    console.log('HTML généré avec succès');
+}
             
             // Fonction pour obtenir un résumé de l'analyse
             function getAnalysisSummary(analysis) {
+                if (!analysis) return 'Aucune analyse';
+                
                 const indicators = [];
                 if (analysis.phishing) indicators.push('Phishing');
                 if (analysis.malware) indicators.push('Malware');
@@ -1329,8 +1316,6 @@
             
             // Fonction pour afficher la pagination
             function renderPagination() {
-                totalPages = Math.ceil(filteredEmails.length / emailsPerPage);
-                
                 if (totalPages <= 1) {
                     pagination.innerHTML = '';
                     return;
@@ -1393,122 +1378,157 @@
                 document.getElementById('prevPage')?.addEventListener('click', () => {
                     if (currentPage > 1) {
                         currentPage--;
-                        renderEmailsForPage();
-                        renderPagination();
+                        loadEmailsData();
                     }
                 });
                 
                 document.getElementById('nextPage')?.addEventListener('click', () => {
                     if (currentPage < totalPages) {
                         currentPage++;
-                        renderEmailsForPage();
-                        renderPagination();
+                        loadEmailsData();
                     }
                 });
                 
                 document.querySelectorAll('.pagination-btn[data-page]').forEach(btn => {
                     btn.addEventListener('click', () => {
                         currentPage = parseInt(btn.dataset.page);
-                        renderEmailsForPage();
-                        renderPagination();
+                        loadEmailsData();
                     });
                 });
             }
             
             // Fonction pour afficher les détails d'un email
-            window.viewEmailDetail = function(emailId) {
-                const email = currentEmails.find(e => e.id === emailId);
-                if (!email) return;
-                
-                // Déterminer la couleur du statut
-                let statusColor = '#4cc9f0';
-                let statusText = 'Sûr';
-                if (email.threatStatus === 'suspicious') {
-                    statusColor = '#f8961e';
-                    statusText = 'Suspect';
-                } else if (email.threatStatus === 'malicious') {
-                    statusColor = '#f72585';
-                    statusText = 'Malveillant';
-                }
-                
-                // Créer le contenu de la modal
-                let html = `
-                <div class="email-detail-section">
-                    <h4>Informations de l'email</h4>
-                    <div class="email-detail-row">
-                        <div class="email-detail-label">Expéditeur:</div>
-                        <div class="email-detail-value">${email.sender.name} &lt;${email.sender.email}&gt;</div>
-                    </div>
-                    <div class="email-detail-row">
-                        <div class="email-detail-label">Sujet:</div>
-                        <div class="email-detail-value">${email.subject}</div>
-                    </div>
-                    <div class="email-detail-row">
-                        <div class="email-detail-label">Date:</div>
-                        <div class="email-detail-value">${email.date}</div>
-                    </div>
-                    <div class="email-detail-row">
-                        <div class="email-detail-label">Statut:</div>
-                        <div class="email-detail-value">
-                            <span style="color: ${statusColor}; font-weight: 600;">${statusText} (Score: ${email.threatScore}%)</span>
-                        </div>
-                    </div>
+window.viewEmailDetail = async function(emailId) {
+    try {
+        console.log('Chargement détails email ID:', emailId);
+        
+        const response = await fetch(`/api/emails/${emailId}/`, {
+            method: 'GET',
+            headers: {
+                'Authorization': 'Bearer ' + accessToken
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Erreur lors du chargement des détails');
+        }
+        
+        const email = await response.json();
+        console.log('Détails email reçus:', email);
+        
+        // Déterminer la couleur du statut - utiliser threat_status
+        let statusColor = '#4cc9f0';
+        let statusText = 'Sûr';
+        const threatStatus = email.threat_status || 
+            (email.threat_level === 'SAFE' ? 'safe' : 
+             (email.threat_level && ['LOW', 'MEDIUM'].includes(email.threat_level) ? 'suspicious' : 'malicious'));
+        
+        if (threatStatus === 'suspicious') {
+            statusColor = '#f8961e';
+            statusText = 'Suspect';
+        } else if (threatStatus === 'malicious') {
+            statusColor = '#f72585';
+            statusText = 'Malveillant';
+        }
+        
+        // Obtenir le contenu de l'email
+        const emailBody = email.body_text || email.body_html || email.body || 'Aucun contenu disponible';
+        
+        // Créer le contenu de la modal
+        let html = `
+        <div class="email-detail-section">
+            <h4>Informations de l'email</h4>
+            <div class="email-detail-row">
+                <div class="email-detail-label">Expéditeur:</div>
+                <div class="email-detail-value">${escapeHtml(email.sender_name || email.sender || 'Inconnu')} &lt;${escapeHtml(email.sender || 'inconnu@example.com')}&gt;</div>
+            </div>
+            <div class="email-detail-row">
+                <div class="email-detail-label">Sujet:</div>
+                <div class="email-detail-value">${escapeHtml(email.subject || 'Sans objet')}</div>
+            </div>
+            <div class="email-detail-row">
+                <div class="email-detail-label">Date:</div>
+                <div class="email-detail-value">${email.formatted_date || email.received_date || 'Date inconnue'}</div>
+            </div>
+            <div class="email-detail-row">
+                <div class="email-detail-label">Statut:</div>
+                <div class="email-detail-value">
+                    <span style="color: ${statusColor}; font-weight: 600;">${statusText} (Score: ${email.risk_score || 0}%)</span>
                 </div>
-                
-                <div class="email-detail-section">
-                    <h4>Résultats de l'analyse SOAR</h4>
-                    <div class="analysis-results">
-                        <div class="analysis-item">
-                            <h5>Phishing</h5>
-                            <p>${email.analysis.phishing ? 'Détecté' : 'Non détecté'}</p>
-                        </div>
-                        <div class="analysis-item">
-                            <h5>Malware</h5>
-                            <p>${email.analysis.malware ? 'Détecté' : 'Non détecté'}</p>
-                        </div>
-                        <div class="analysis-item">
-                            <h5>Spam</h5>
-                            <p>${email.analysis.spam ? 'Détecté' : 'Non détecté'}</p>
-                        </div>
-                        <div class="analysis-item">
-                            <h5>Réputation</h5>
-                            <p>${getReputationText(email.analysis.reputation)}</p>
-                        </div>
-                    </div>
+            </div>
+        </div>
+        
+        <div class="email-detail-section">
+            <h4>Résultats de l'analyse SOAR</h4>
+            <div class="analysis-results">
+                <div class="analysis-item">
+                    <h5>Type de menace</h5>
+                    <p>${email.threat_type || 'NONE'}</p>
                 </div>
-                
-                <div class="email-detail-section">
-                    <h4>Contenu de l'email</h4>
-                    <div class="email-body">${escapeHtml(email.body)}</div>
+                <div class="analysis-item">
+                    <h5>Niveau de menace</h5>
+                    <p>${email.threat_level || 'SAFE'}</p>
                 </div>
-                
-                <div class="email-detail-section">
-                    <h4>Actions recommandées</h4>
-                    <div style="display: flex; gap: 10px; margin-top: 15px;">
-                        ${email.threatStatus === 'safe' ? 
-                            '<button class="btn btn-primary" onclick="markAsSafe(' + emailId + ')">Marquer comme sûr</button>' : 
-                            '<button class="btn btn-secondary" onclick="markAsSafe(' + emailId + ')">Marquer comme sûr</button>'
-                        }
-                        
-                        ${email.threatStatus === 'suspicious' ? 
-                            '<button class="btn btn-primary" onclick="quarantineEmail(' + emailId + ')">Mettre en quarantaine</button>' : 
-                            '<button class="btn btn-secondary" onclick="quarantineEmail(' + emailId + ')">Mettre en quarantaine</button>'
-                        }
-                        
-                        ${email.threatStatus === 'malicious' ? 
-                            '<button class="btn btn-primary" onclick="deleteEmail(' + emailId + ')">Supprimer définitivement</button>' : 
-                            '<button class="btn btn-secondary" onclick="deleteEmail(' + emailId + ')">Supprimer définitivement</button>'
-                        }
-                    </div>
+                <div class="analysis-item">
+                    <h5>Score de risque</h5>
+                    <p>${email.risk_score || 0}%</p>
                 </div>
-                `;
-                
-                modalBody.innerHTML = html;
-                emailDetailModal.style.display = 'flex';
-            };
+                <div class="analysis-item">
+                    <h5>Résumé</h5>
+                    <p>${email.analysis_summary || 'Aucune analyse disponible'}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="email-detail-section">
+            <h4>Contenu de l'email</h4>
+            <div class="email-body">${escapeHtml(emailBody)}</div>
+        </div>
+        
+        <div class="email-detail-section">
+            <h4>Actions recommandées</h4>
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button class="btn btn-primary" onclick="markAsSafe(${emailId})">Marquer comme sûr</button>
+                <button class="btn btn-warning" onclick="quarantineEmail(${emailId})">Mettre en quarantaine</button>
+                <button class="btn btn-danger" onclick="deleteEmail(${emailId})">Supprimer définitivement</button>
+            </div>
+        </div>
+        `;
+        
+        modalBody.innerHTML = html;
+        emailDetailModal.style.display = 'flex';
+        
+    } catch (error) {
+        console.error('Erreur:', error);
+        showAlert('Erreur lors du chargement des détails de l\'email: ' + error.message, 'error');
+    }
+};
+// Fonction pour obtenir le texte de réputation
+function getReputationText(reputation) {
+    if (!reputation) return 'Inconnue';
+    
+    const reputationMap = {
+        'very_low': 'Très faible',
+        'low': 'Faible',
+        'medium': 'Moyenne',
+        'high': 'Haute',
+        'very_high': 'Très haute'
+    };
+    return reputationMap[reputation] || 'Inconnue';
+}
+
+// Fonction pour échapper le HTML
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
             
             // Fonction pour obtenir le texte de réputation
             function getReputationText(reputation) {
+                if (!reputation) return 'Inconnue';
+                
                 const reputationMap = {
                     'very_low': 'Très faible',
                     'low': 'Faible',
@@ -1521,6 +1541,7 @@
             
             // Fonction pour échapper le HTML
             function escapeHtml(text) {
+                if (!text) return '';
                 const div = document.createElement('div');
                 div.textContent = text;
                 return div.innerHTML;
@@ -1532,25 +1553,20 @@
                     const response = await fetch(`/api/emails/${emailId}/mark-safe/`, {
                         method: 'POST',
                         headers: {
-                            'Authorization': 'Bearer ' + accessToken
+                            'Authorization': 'Bearer ' + accessToken,
+                            'Content-Type': 'application/json'
                         }
                     });
                     
                     if (response.ok) {
                         showAlert('Email marqué comme sûr', 'success');
                         
-                        // Mettre à jour l'email localement
-                        const emailIndex = currentEmails.findIndex(e => e.id === emailId);
-                        if (emailIndex !== -1) {
-                            currentEmails[emailIndex].threatStatus = 'safe';
-                            currentEmails[emailIndex].threatScore = 10;
-                        }
-                        
                         // Recharger les données
-                        updateStatsCounters();
-                        applyFilters();
+                        loadEmailsData();
                         emailDetailModal.style.display = 'none';
                     } else {
+                        const errorText = await response.text();
+                        console.error('Erreur API:', errorText);
                         showAlert('Erreur lors du marquage de l\'email', 'error');
                     }
                 } catch (error) {
@@ -1569,25 +1585,20 @@
                     const response = await fetch(`/api/emails/${emailId}/quarantine/`, {
                         method: 'POST',
                         headers: {
-                            'Authorization': 'Bearer ' + accessToken
+                            'Authorization': 'Bearer ' + accessToken,
+                            'Content-Type': 'application/json'
                         }
                     });
                     
                     if (response.ok) {
                         showAlert('Email mis en quarantaine avec succès', 'success');
                         
-                        // Mettre à jour l'email localement
-                        const emailIndex = currentEmails.findIndex(e => e.id === emailId);
-                        if (emailIndex !== -1) {
-                            currentEmails[emailIndex].threatStatus = 'suspicious';
-                            currentEmails[emailIndex].threatScore = 50;
-                        }
-                        
                         // Recharger les données
-                        updateStatsCounters();
-                        applyFilters();
+                        loadEmailsData();
                         emailDetailModal.style.display = 'none';
                     } else {
+                        const errorText = await response.text();
+                        console.error('Erreur API:', errorText);
                         showAlert('Erreur lors de la mise en quarantaine', 'error');
                     }
                 } catch (error) {
@@ -1603,7 +1614,7 @@
                 }
                 
                 try {
-                    const response = await fetch(`/api/emails/${emailId}/`, {
+                    const response = await fetch(`/api/emails/${emailId}/delete/`, {
                         method: 'DELETE',
                         headers: {
                             'Authorization': 'Bearer ' + accessToken
@@ -1613,14 +1624,12 @@
                     if (response.ok) {
                         showAlert('Email supprimé avec succès', 'success');
                         
-                        // Supprimer l'email localement
-                        currentEmails = currentEmails.filter(e => e.id !== emailId);
-                        
                         // Recharger les données
-                        updateStatsCounters();
-                        applyFilters();
+                        loadEmailsData();
                         emailDetailModal.style.display = 'none';
                     } else {
+                        const errorText = await response.text();
+                        console.error('Erreur API:', errorText);
                         showAlert('Erreur lors de la suppression', 'error');
                     }
                 } catch (error) {
@@ -1637,7 +1646,8 @@
                     const response = await fetch('/api/scan/', {
                         method: 'POST',
                         headers: {
-                            'Authorization': 'Bearer ' + accessToken
+                            'Authorization': 'Bearer ' + accessToken,
+                            'Content-Type': 'application/json'
                         }
                     });
                     
@@ -1649,6 +1659,8 @@
                             loadEmailsData();
                         }, 3000);
                     } else {
+                        const errorText = await response.text();
+                        console.error('Erreur API:', errorText);
                         showAlert('Erreur lors du lancement de l\'analyse', 'error');
                     }
                 } catch (error) {
@@ -1738,6 +1750,19 @@
                     refreshButton.innerHTML = '<i class="fas fa-sync-alt"></i> Actualiser';
                     refreshButton.disabled = false;
                 }
+            }
+            
+            // Fonction debounce pour les champs de recherche
+            function debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
             }
             
             // Rafraîchir les données toutes les 5 minutes

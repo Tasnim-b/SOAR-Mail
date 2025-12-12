@@ -17,7 +17,7 @@ from django.utils import timezone
 from datetime import timedelta
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import UntypedToken
-from .serializers import CustomTokenObtainPairSerializer
+from .serializers import CustomTokenObtainPairSerializer,EmailMessageSerializer
 from .models import EmailAccount, EmailMessage
 from rest_framework import generics, filters
 from rest_framework.pagination import PageNumberPagination
@@ -176,7 +176,6 @@ class ProtectedDashboardView(APIView):
         })
 
 
-# views.py - Suite
 
 
 # Vue pour la page HTML des emails analysés
@@ -198,6 +197,7 @@ class EmailListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
     pagination_class = EmailPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    serializer_class = EmailMessageSerializer
     
     filterset_fields = ['threat_level', 'threat_type', 'has_attachments', 'is_read']
     search_fields = ['sender', 'sender_name', 'subject', 'body_text']
@@ -281,7 +281,8 @@ class EmailDetailView(generics.RetrieveAPIView):
     """
     permission_classes = [IsAuthenticated]
     queryset = EmailMessage.objects.all()
-    lookup_field = 'id'
+    # URL uses <int:pk> for detail routes, keep default lookup 'pk'
+    lookup_field = 'pk'
     
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -312,6 +313,8 @@ class EmailDetailView(generics.RetrieveAPIView):
                 'reputation': self._get_reputation(instance.risk_score)
             },
             'body': instance.body_text or instance.body_html,
+            'body_text': instance.body_text, 
+            'body_html': instance.body_html, 
             'attachments': attachments,
             'recipients': instance.recipients,
             'size': instance.size,
@@ -363,6 +366,10 @@ class MarkEmailSafeView(generics.UpdateAPIView):
             'threatStatus': 'safe',
             'threatScore': instance.risk_score
         })
+    
+    # Support POST from frontend convenience (was using POST)
+    def post(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
 
 # Vue API pour mettre en quarantaine un email
 class QuarantineEmailView(generics.UpdateAPIView):
@@ -382,6 +389,10 @@ class QuarantineEmailView(generics.UpdateAPIView):
             'threatStatus': 'suspicious',
             'threatScore': instance.risk_score
         })
+    
+    # Support POST from frontend convenience
+    def post(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
 
 # Vue API pour supprimer un email
 class DeleteEmailView(generics.DestroyAPIView):

@@ -93,3 +93,18 @@ Ce score est calculé en additionnant différents signaux détectés dans :
 ✔ l’expéditeur
 ✔ les pièces jointes
 ✔ les liens URL
+Méthode : _analyze_subject()
+
+Elle vérifie :
+✔ mots de phishing (+10)
+✔ mots de spam (+5)
+✔ caractères agressifs comme "!!!" (+5)
+✔ excès de MAJUSCULES (+10)
+
+
+le travail à faire :
+Ajouter des logs plus détaillés pour voir ce qui se passe ?
+
+Créer une interface pour voir les emails analysés dans ton dashboard ?
+
+Configurer des tâches automatiques pour l'analyse périodique ?
