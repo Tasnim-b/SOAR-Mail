@@ -1,0 +1,2102 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOAR-Mail - Quarantaine</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #4361ee;
+            --primary-dark: #3a56d4;
+            --secondary: #7209b7;
+            --danger: #f72585;
+            --warning: #f8961e;
+            --success: #4cc9f0;
+            --info: #4895ef;
+            --dark: #212529;
+            --light: #f8f9fa;
+            --gray: #6c757d;
+            --border-radius: 12px;
+            --box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            --sidebar-width: 250px;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f7fb;
+            color: var(--dark);
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: linear-gradient(to bottom, var(--primary), var(--secondary));
+            color: white;
+            padding: 25px 0;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+        
+        .sidebar-header {
+            padding: 0 25px 25px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+        }
+        
+        .sidebar-header h2 {
+            font-size: 22px;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .sidebar-header h2 i {
+            margin-right: 10px;
+        }
+        
+        .sidebar-header p {
+            font-size: 13px;
+            opacity: 0.8;
+        }
+        
+        .sidebar-menu {
+            padding: 25px 0;
+        }
+        
+        .sidebar-menu ul {
+            list-style: none;
+        }
+        
+        .sidebar-menu li {
+            margin-bottom: 5px;
+        }
+        
+        .sidebar-menu a {
+            display: flex;
+            align-items: center;
+            padding: 12px 25px;
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .sidebar-menu a:hover, .sidebar-menu a.active {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-left: 4px solid var(--warning);
+        }
+        
+        .sidebar-menu i {
+            margin-right: 12px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .sidebar-footer {
+            padding: 25px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+        }
+        
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+        }
+        
+        .user-details h4 {
+            font-size: 14px;
+            margin-bottom: 3px;
+        }
+        
+        .user-details p {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+        
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: var(--sidebar-width);
+            padding: 25px;
+        }
+        
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            color: var(--dark);
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .btn i {
+            margin-right: 8px;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(67, 97, 238, 0.3);
+        }
+        
+        .btn-secondary {
+            background-color: rgba(67, 97, 238, 0.1);
+            color: var(--primary);
+        }
+        
+        .btn-secondary:hover {
+            background-color: rgba(67, 97, 238, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        .btn-success {
+            background-color: var(--success);
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background-color: #3ab0d6;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(76, 201, 240, 0.3);
+        }
+        
+        .btn-warning {
+            background-color: var(--warning);
+            color: white;
+        }
+        
+        .btn-warning:hover {
+            background-color: #e08715;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(248, 150, 30, 0.3);
+        }
+        
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background-color: #d1146a;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(247, 37, 133, 0.3);
+        }
+        
+        .btn-logout {
+            background-color: rgba(247, 37, 133, 0.1);
+            color: var(--danger);
+        }
+        
+        .btn-logout:hover {
+            background-color: var(--danger);
+            color: white;
+        }
+        
+        /* Stats Overview */
+        .stats-overview {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 20px;
+            box-shadow: var(--box-shadow);
+            display: flex;
+            align-items: center;
+            transition: transform 0.3s;
+            border-left: 5px solid var(--warning);
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
+        }
+        
+        .stat-card.danger {
+            border-left-color: var(--danger);
+        }
+        
+        .stat-card.success {
+            border-left-color: var(--success);
+        }
+        
+        .stat-card.info {
+            border-left-color: var(--info);
+        }
+        
+        .stat-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-size: 22px;
+            color: white;
+            background-color: var(--warning);
+        }
+        
+        .stat-card.danger .stat-icon {
+            background-color: var(--danger);
+        }
+        
+        .stat-card.success .stat-icon {
+            background-color: var(--success);
+        }
+        
+        .stat-card.info .stat-icon {
+            background-color: var(--info);
+        }
+        
+        .stat-content h3 {
+            font-size: 28px;
+            margin-bottom: 5px;
+        }
+        
+        .stat-content p {
+            color: var(--gray);
+            font-size: 14px;
+        }
+        
+        /* Filters */
+        .filters-card {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 20px;
+            box-shadow: var(--box-shadow);
+            margin-bottom: 25px;
+        }
+        
+        .filters-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .filters-header h3 {
+            font-size: 18px;
+            color: var(--dark);
+        }
+        
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .filter-group label {
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: var(--gray);
+            font-weight: 500;
+        }
+        
+        .filter-select {
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            background-color: white;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
+        }
+        
+        /* Quarantine Table */
+        .quarantine-card {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 25px;
+            box-shadow: var(--box-shadow);
+        }
+        
+        .quarantine-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .quarantine-header h3 {
+            font-size: 18px;
+            color: var(--dark);
+        }
+        
+        .quarantine-count {
+            font-size: 14px;
+            color: var(--gray);
+        }
+        
+        .quarantine-table-container {
+            overflow-x: auto;
+        }
+        
+        .quarantine-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1000px;
+        }
+        
+        .quarantine-table th {
+            text-align: left;
+            padding: 15px;
+            border-bottom: 2px solid #eee;
+            color: var(--gray);
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
+        }
+        
+        .quarantine-table td {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            vertical-align: middle;
+        }
+        
+        .quarantine-table tr {
+            transition: background-color 0.2s;
+        }
+        
+        .quarantine-table tr:hover {
+            background-color: #f9f9f9;
+        }
+        
+        .email-sender {
+            display: flex;
+            align-items: center;
+        }
+        
+        .sender-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background-color: #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+            color: var(--warning);
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .sender-info {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .sender-name {
+            font-weight: 600;
+            margin-bottom: 3px;
+        }
+        
+        .sender-email {
+            font-size: 12px;
+            color: var(--gray);
+        }
+        
+        .email-subject {
+            font-weight: 500;
+            max-width: 250px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .threat-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: inline-block;
+        }
+        
+        .threat-phishing {
+            background-color: rgba(248, 150, 30, 0.1);
+            color: var(--warning);
+        }
+        
+        .threat-malware {
+            background-color: rgba(247, 37, 133, 0.1);
+            color: var(--danger);
+        }
+        
+        .threat-spam {
+            background-color: rgba(108, 117, 125, 0.1);
+            color: var(--gray);
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .action-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: none;
+            background-color: #f8f9fa;
+            color: var(--gray);
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .action-btn:hover {
+            background-color: #e9ecef;
+            color: var(--dark);
+        }
+        
+        .action-btn.restore:hover {
+            background-color: rgba(76, 201, 240, 0.1);
+            color: var(--success);
+        }
+        
+        .action-btn.view:hover {
+            background-color: rgba(67, 97, 238, 0.1);
+            color: var(--primary);
+        }
+        
+        .action-btn.delete:hover {
+            background-color: rgba(247, 37, 133, 0.1);
+            color: var(--danger);
+        }
+        
+        /* No Data */
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: var(--gray);
+        }
+        
+        .no-data i {
+            font-size: 48px;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+        
+        /* Bulk Actions */
+        .bulk-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 25px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        
+        .bulk-select {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .bulk-select input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        .bulk-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background-color: white;
+            border-radius: var(--border-radius);
+            width: 95%;
+            max-width: 1100px;
+            /* allow tall content but keep modal within viewport */
+            max-height: 90vh;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            animation: modalAppear 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        @keyframes modalAppear {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        
+        .modal-header {
+            padding: 25px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #f8f9fa;
+            border-top-left-radius: var(--border-radius);
+            border-top-right-radius: var(--border-radius);
+        }
+        
+        .modal-header h3 {
+            font-size: 20px;
+            color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .modal-header h3 i {
+            color: var(--warning);
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: var(--gray);
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+        
+        .modal-close:hover {
+            color: var(--danger);
+        }
+        
+        .modal-body {
+            padding: 20px;
+            /* make body scrollable when content is large */
+            overflow: auto;
+            -webkit-overflow-scrolling: touch;
+            max-height: calc(90vh - 160px);
+        }
+        
+        .modal-footer {
+            padding: 14px 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+
+        /* Styles spécifiques au contenu d'email en quarantaine */
+        #quarantineModalBody {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--dark);
+        }
+
+        #quarantineModalBody pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background: #f7f7f9;
+            padding: 12px;
+            border-radius: 6px;
+            overflow: auto;
+            max-height: 50vh;
+        }
+
+        #quarantineModalBody img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 8px 0;
+        }
+
+        #quarantineModalBody ul, #quarantineModalBody ol {
+            padding-left: 20px;
+            margin: 8px 0;
+        }
+        
+        /* Alert */
+        .alert {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            display: none;
+            animation: slideDown 0.3s ease;
+        }
+        
+        @keyframes slideDown {
+            from { transform: translateY(-10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .alert-error {
+            background-color: #fee;
+            border: 1px solid #fcc;
+            color: #c00;
+        }
+        
+        .alert-success {
+            background-color: #efe;
+            border: 1px solid #cfc;
+            color: #0c0;
+        }
+        
+        .alert-warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        
+        /* Loading */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(67, 97, 238, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            animation: spin 1s ease-in-out infinite;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Responsive */
+        @media (max-width: 992px) {
+            .sidebar {
+                width: 70px;
+                overflow-x: hidden;
+            }
+            
+            .sidebar-header h2 span, 
+            .sidebar-header p,
+            .sidebar-menu a span,
+            .user-details {
+                display: none;
+            }
+            
+            .sidebar-menu a {
+                justify-content: center;
+                padding: 15px;
+            }
+            
+            .sidebar-menu i {
+                margin-right: 0;
+                font-size: 20px;
+            }
+            
+            .main-content {
+                margin-left: 70px;
+            }
+            
+            .sidebar-footer {
+                padding: 15px;
+            }
+            
+            .filters-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            
+            .header-actions {
+                width: 100%;
+                justify-content: space-between;
+            }
+            
+            .stats-overview {
+                grid-template-columns: 1fr;
+            }
+            
+            .bulk-actions {
+                flex-direction: column;
+                gap: 15px;
+                align-items: flex-start;
+            }
+            
+            .bulk-buttons {
+                width: 100%;
+                flex-direction: column;
+            }
+            
+            .bulk-buttons .btn {
+                width: 100%;
+            }
+        }
+        
+        /* Tooltip */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .tooltip .tooltip-text {
+            visibility: hidden;
+            width: 200px;
+            background-color: var(--dark);
+            color: white;
+            text-align: center;
+            border-radius: 6px;
+            padding: 8px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+            font-weight: normal;
+        }
+        
+        .tooltip:hover .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+        
+        .tooltip .tooltip-text::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: var(--dark) transparent transparent transparent;
+        }
+        
+        /* Badge animation */
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            background-color: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+        }
+        
+        .empty-state i {
+            font-size: 64px;
+            color: var(--warning);
+            margin-bottom: 20px;
+            opacity: 0.7;
+        }
+        
+        .empty-state h3 {
+            font-size: 22px;
+            margin-bottom: 10px;
+            color: var(--dark);
+        }
+        
+        .empty-state p {
+            color: var(--gray);
+            max-width: 500px;
+            margin: 0 auto 25px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h2><i class="fas fa-shield-alt"></i> <span>SOAR-Mail</span></h2>
+            <p>Security Orchestration</p>
+        </div>
+        
+        <nav class="sidebar-menu">
+            <ul>
+                <li><a href="/dashboard/"><i class="fas fa-tachometer-alt"></i> <span>Tableau de bord</span></a></li>
+                <li><a href="/emails/"><i class="fas fa-inbox"></i> <span>Emails analysés</span></a></li>
+                <li><a href="/quarantaine/" class="active"><i class="fas fa-shield-alt"></i> <span>Quarantaine</span></a></li>
+                <li><a href="/playbooks/"><i class="fas fa-play-circle"></i> <span>Playbooks</span></a></li>
+                <li><a href="/statistiques/"><i class="fas fa-chart-bar"></i> <span>Statistiques</span></a></li>
+                <!-- <li><a href="/config/"><i class="fas fa-cog"></i> <span>Configuration</span></a></li> -->
+            </ul>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="user-details">
+                    <h4 id="userEmail">Chargement...</h4>
+                    <p>Administrateur</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Header -->
+        <div class="header">
+            <h1>Quarantaine</h1>
+            <div class="header-actions">
+                <button class="btn btn-secondary" id="refreshButton">
+                    <i class="fas fa-sync-alt"></i> Actualiser
+                </button>
+                <button class="btn btn-logout" id="logoutButton">
+                    <i class="fas fa-sign-out-alt"></i> Déconnexion
+                </button>
+            </div>
+        </div>
+        
+        <!-- Alert Message -->
+        <div id="alertMessage" class="alert"></div>
+        
+        <!-- Stats Overview -->
+        <div class="stats-overview">
+            <div class="stat-card pulse">
+                <div class="stat-icon">
+                    <i class="fas fa-shield-alt"></i>
+                </div>
+                <div class="stat-content">
+                    <h3 id="totalQuarantined">0</h3>
+                    <p>Emails en quarantaine</p>
+                </div>
+            </div>
+            
+            <div class="stat-card danger">
+                <div class="stat-icon">
+                    <i class="fas fa-skull-crossbones"></i>
+                </div>
+                <div class="stat-content">
+                    <h3 id="malwareCount">0</h3>
+                    <p>Contenant du malware</p>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-fish"></i>
+                </div>
+                <div class="stat-content">
+                    <h3 id="phishingCount">0</h3>
+                    <p>Emails de phishing</p>
+                </div>
+            </div>
+            
+            <div class="stat-card info">
+                <div class="stat-icon">
+                    <i class="fas fa-history"></i>
+                </div>
+                <div class="stat-content">
+                    <h3 id="oldestDays">0</h3>
+                    <p>Jours plus ancien</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Filters -->
+        <div class="filters-card">
+            <div class="filters-header">
+                <h3>Filtres de quarantaine</h3>
+                <button class="btn btn-secondary" id="clearFilters">
+                    <i class="fas fa-times"></i> Effacer les filtres
+                </button>
+            </div>
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label for="filterThreatType">Type de menace</label>
+                    <select id="filterThreatType" class="filter-select">
+                        <option value="all">Tous les types</option>
+                        <option value="phishing">Phishing</option>
+                        <option value="malware">Malware</option>
+                        <option value="spam">Spam</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="filterDate">Date de quarantaine</label>
+                    <select id="filterDate" class="filter-select">
+                        <option value="all">Toutes les dates</option>
+                        <option value="today">Aujourd'hui</option>
+                        <option value="week">Cette semaine</option>
+                        <option value="month">Ce mois</option>
+                        <option value="older">Plus ancien (30+ jours)</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="filterSender">Expéditeur</label>
+                    <select id="filterSender" class="filter-select">
+                        <option value="all">Tous les expéditeurs</option>
+                        <option value="unknown">Inconnu</option>
+                        <option value="suspicious">Suspect</option>
+                        <option value="blacklisted">Liste noire</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="filterAction">Action recommandée</label>
+                    <select id="filterAction" class="filter-select">
+                        <option value="all">Toutes les actions</option>
+                        <option value="restore">Restaurer</option>
+                        <option value="delete">Supprimer</option>
+                        <option value="analyze">Analyser</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quarantine Table -->
+        <div class="quarantine-card">
+            <div class="quarantine-header">
+                <h3>Emails mis en quarantaine</h3>
+                <div class="quarantine-count">
+                    <span id="displayCount">0</span> emails sur <span id="totalCount">0</span>
+                </div>
+            </div>
+            
+            <div class="quarantine-table-container">
+                <table class="quarantine-table">
+                    <thead>
+                        <tr>
+                            <th width="50">
+                                <input type="checkbox" id="selectAll">
+                            </th>
+                            <th>Expéditeur</th>
+                            <th>Sujet</th>
+                            <th>Date</th>
+                            <th>Type de menace</th>
+                            <th>Score</th>
+                            <th>En quarantaine depuis</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="quarantineBody">
+                        <!-- Les emails en quarantaine seront chargés ici dynamiquement -->
+                    </tbody>
+                </table>
+                
+                <!-- Empty State -->
+                <div id="emptyQuarantine" class="empty-state" style="display: none;">
+                    <i class="fas fa-shield-alt"></i>
+                    <h3>Quarantaine vide</h3>
+                    <p>Aucun email n'est actuellement en quarantaine. C'est une bonne nouvelle ! Cela signifie que soit aucun email malveillant n'a été détecté, soit tous les emails ont déjà été traités.</p>
+                    <button class="btn btn-primary" id="refreshEmpty">
+                        <i class="fas fa-sync-alt"></i> Actualiser
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Bulk Actions -->
+            <div class="bulk-actions" id="bulkActions" style="display: none;">
+                <div class="bulk-select">
+                    <input type="checkbox" id="bulkCheckbox">
+                    <span id="selectedCount">0</span> emails sélectionnés
+                </div>
+                <div class="bulk-buttons">
+                    <button class="btn btn-success" id="bulkRestore">
+                        <i class="fas fa-undo"></i> Restaurer la sélection
+                    </button>
+                    <button class="btn btn-danger" id="bulkDelete">
+                        <i class="fas fa-trash"></i> Supprimer la sélection
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Pagination -->
+            <div class="pagination" id="pagination">
+                <!-- La pagination sera générée dynamiquement -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Restore Modal -->
+    <div class="modal" id="restoreModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-undo"></i> Restaurer l'email</h3>
+                <button class="modal-close" id="closeRestoreModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="restoreMessage">Êtes-vous sûr de vouloir restaurer cet email ? Il sera déplacé vers votre boîte de réception.</p>
+                <div class="form-group" style="margin-top: 20px;">
+                    <label for="restoreAction">Action supplémentaire :</label>
+                    <select id="restoreAction" class="filter-select" style="width: 100%;">
+                        <option value="restore_only">Restaurer seulement</option>
+                        <option value="mark_safe">Marquer comme sûr</option>
+                        <option value="add_exception">Ajouter une exception pour l'expéditeur</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelRestore">Annuler</button>
+                <button class="btn btn-success" id="confirmRestore">
+                    <i class="fas fa-undo"></i> Restaurer
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Delete Modal -->
+    <div class="modal" id="deleteModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-trash"></i> Supprimer définitivement</h3>
+                <button class="modal-close" id="closeDeleteModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="deleteMessage">Êtes-vous sûr de vouloir supprimer définitivement cet email ? Cette action est irréversible.</p>
+                <div class="alert alert-warning" style="margin-top: 20px; display: block;">
+                    <i class="fas fa-exclamation-triangle"></i> L'email sera définitivement supprimé du système et ne pourra pas être récupéré.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelDelete">Annuler</button>
+                <button class="btn btn-danger" id="confirmDelete">
+                    <i class="fas fa-trash"></i> Supprimer définitivement
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bulk Actions Modal -->
+    <div class="modal" id="bulkModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-tasks"></i> Actions groupées</h3>
+                <button class="modal-close" id="closeBulkModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="bulkMessage"></p>
+                <div class="alert alert-warning" id="bulkWarning" style="margin-top: 20px; display: none;">
+                    <i class="fas fa-exclamation-triangle"></i> Cette action s'appliquera à tous les emails sélectionnés.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelBulk">Annuler</button>
+                <button class="btn" id="confirmBulk">
+                    <!-- Le texte et la couleur seront définis dynamiquement -->
+                </button>
+            </div>
+        </div>
+    </div>
+    
+            <!-- Email Detail Modal -->
+            <div class="modal" id="quarantineEmailModal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Détails de l'email en quarantaine</h3>
+                        <button class="modal-close" id="closeQuarantineModal">&times;</button>
+                    </div>
+                    <div class="modal-body" id="quarantineModalBody">
+                        <!-- Contenu chargé dynamiquement -->
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn btn-secondary" id="closeQuarantineFooter">Fermer</button>
+                    </div>
+                </div>
+            </div>
+    
+   <!-- Dans le fichier quarantaine.html, remplacez toute la section <script> par ceci : -->
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Éléments DOM
+        const alertMessage = document.getElementById('alertMessage');
+        const logoutButton = document.getElementById('logoutButton');
+        const refreshButton = document.getElementById('refreshButton');
+        const refreshEmpty = document.getElementById('refreshEmpty');
+        const userEmailElement = document.getElementById('userEmail');
+        const quarantineBody = document.getElementById('quarantineBody');
+        const emptyQuarantine = document.getElementById('emptyQuarantine');
+        const bulkActions = document.getElementById('bulkActions');
+        const selectAllCheckbox = document.getElementById('selectAll');
+        const selectedCount = document.getElementById('selectedCount');
+        const displayCount = document.getElementById('displayCount');
+        const totalCount = document.getElementById('totalCount');
+        
+        // Statistiques
+        const totalQuarantined = document.getElementById('totalQuarantined');
+        const malwareCount = document.getElementById('malwareCount');
+        const phishingCount = document.getElementById('phishingCount');
+        const oldestDays = document.getElementById('oldestDays');
+        
+        // Filtres
+        const filterThreatType = document.getElementById('filterThreatType');
+        const filterDate = document.getElementById('filterDate');
+        const filterSender = document.getElementById('filterSender');
+        const filterAction = document.getElementById('filterAction');
+        const clearFilters = document.getElementById('clearFilters');
+        
+        // Boutons d'action groupée
+        const bulkCheckbox = document.getElementById('bulkCheckbox');
+        const bulkRestore = document.getElementById('bulkRestore');
+        const bulkDelete = document.getElementById('bulkDelete');
+        
+        // Modals
+        const restoreModal = document.getElementById('restoreModal');
+        const closeRestoreModal = document.getElementById('closeRestoreModal');
+        const cancelRestore = document.getElementById('cancelRestore');
+        const confirmRestore = document.getElementById('confirmRestore');
+        
+        const deleteModal = document.getElementById('deleteModal');
+        const closeDeleteModal = document.getElementById('closeDeleteModal');
+        const cancelDelete = document.getElementById('cancelDelete');
+        const confirmDelete = document.getElementById('confirmDelete');
+        
+        const bulkModal = document.getElementById('bulkModal');
+        const closeBulkModal = document.getElementById('closeBulkModal');
+        const cancelBulk = document.getElementById('cancelBulk');
+        const confirmBulk = document.getElementById('confirmBulk');
+        const bulkMessage = document.getElementById('bulkMessage');
+        const bulkWarning = document.getElementById('bulkWarning');
+        
+        // Email detail modal
+        const emailDetailModal = document.getElementById('quarantineEmailModal');
+        const closeQuarantineModal = document.getElementById('closeQuarantineModal');
+        const closeQuarantineFooter = document.getElementById('closeQuarantineFooter');
+        const quarantineModalBody = document.getElementById('quarantineModalBody');
+        
+        // Variables globales
+        let quarantinedEmails = [];
+        let filteredEmails = [];
+        let selectedEmails = new Set();
+        let currentPage = 1;
+        let itemsPerPage = 10;
+        let totalPages = 1;
+        let totalItems = 0;
+        let currentAction = null; // 'restore' ou 'delete' pour les actions groupées
+        let currentEmailId = null; // Pour les actions individuelles
+        
+        // Vérifier si l'utilisateur est connecté
+        const accessToken = localStorage.getItem('access_token');
+        const refreshToken = localStorage.getItem('refresh_token');
+        
+        if (!accessToken) {
+            // Si pas de token, rediriger vers la page de login
+            showAlert('Veuillez vous connecter pour accéder à la quarantaine', 'error');
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 2000);
+            return;
+        }
+        
+        // Afficher l'email de l'utilisateur depuis le token
+        try {
+            const payload = JSON.parse(atob(accessToken.split('.')[1]));
+            if (payload.email) {
+                userEmailElement.textContent = payload.email;
+            }
+        } catch (e) {
+            console.error('Erreur de décodage du token:', e);
+            userEmailElement.textContent = 'Utilisateur';
+        }
+        
+        // Charger les données
+        loadQuarantineData();
+        
+        // Configurer les écouteurs d'événements
+        logoutButton.addEventListener('click', async function() {
+            await handleLogout();
+        });
+        
+        refreshButton.addEventListener('click', function() {
+            currentPage = 1;
+            loadQuarantineData();
+        });
+        
+        refreshEmpty.addEventListener('click', function() {
+            currentPage = 1;
+            loadQuarantineData();
+        });
+        
+        // Filtres
+        filterThreatType.addEventListener('change', function() {
+            currentPage = 1;
+            loadQuarantineData();
+        });
+        
+        filterDate.addEventListener('change', function() {
+            currentPage = 1;
+            loadQuarantineData();
+        });
+        
+        filterSender.addEventListener('change', function() {
+            currentPage = 1;
+            loadQuarantineData();
+        });
+        
+        filterAction.addEventListener('change', function() {
+            currentPage = 1;
+            loadQuarantineData();
+        });
+        
+        clearFilters.addEventListener('click', function() {
+            filterThreatType.value = 'all';
+            filterDate.value = 'all';
+            filterSender.value = 'all';
+            filterAction.value = 'all';
+            currentPage = 1;
+            loadQuarantineData();
+        });
+        
+        // Sélection globale
+        selectAllCheckbox.addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.email-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAllCheckbox.checked;
+                const emailId = parseInt(checkbox.dataset.id);
+                if (checkbox.checked) {
+                    selectedEmails.add(emailId);
+                } else {
+                    selectedEmails.delete(emailId);
+                }
+            });
+            updateSelectedCount();
+            toggleBulkActions();
+        });
+        
+        bulkCheckbox.addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.email-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = bulkCheckbox.checked;
+                const emailId = parseInt(checkbox.dataset.id);
+                if (checkbox.checked) {
+                    selectedEmails.add(emailId);
+                } else {
+                    selectedEmails.delete(emailId);
+                }
+            });
+            
+            selectAllCheckbox.checked = bulkCheckbox.checked;
+            updateSelectedCount();
+        });
+        
+        // Actions groupées
+        bulkRestore.addEventListener('click', function() {
+            if (selectedEmails.size === 0) return;
+            
+            currentAction = 'restore';
+            bulkMessage.textContent = `Êtes-vous sûr de vouloir restaurer ${selectedEmails.size} email(s) ? Ils seront déplacés vers votre boîte de réception.`;
+            bulkWarning.style.display = 'block';
+            
+            confirmBulk.innerHTML = '<i class="fas fa-undo"></i> Restaurer';
+            confirmBulk.className = 'btn btn-success';
+            
+            bulkModal.style.display = 'flex';
+        });
+        
+        bulkDelete.addEventListener('click', function() {
+            if (selectedEmails.size === 0) return;
+            
+            currentAction = 'delete';
+            bulkMessage.textContent = `Êtes-vous sûr de vouloir supprimer définitivement ${selectedEmails.size} email(s) ? Cette action est irréversible.`;
+            bulkWarning.style.display = 'block';
+            
+            confirmBulk.innerHTML = '<i class="fas fa-trash"></i> Supprimer définitivement';
+            confirmBulk.className = 'btn btn-danger';
+            
+            bulkModal.style.display = 'flex';
+        });
+        
+        // Gestion des modals
+        closeRestoreModal.addEventListener('click', () => restoreModal.style.display = 'none');
+        cancelRestore.addEventListener('click', () => restoreModal.style.display = 'none');
+        
+        closeDeleteModal.addEventListener('click', () => deleteModal.style.display = 'none');
+        cancelDelete.addEventListener('click', () => deleteModal.style.display = 'none');
+        
+        closeBulkModal.addEventListener('click', () => bulkModal.style.display = 'none');
+        cancelBulk.addEventListener('click', () => bulkModal.style.display = 'none');
+        
+        // Fermer les modals en cliquant en dehors
+        window.addEventListener('click', function(event) {
+            if (event.target === restoreModal) restoreModal.style.display = 'none';
+            if (event.target === deleteModal) deleteModal.style.display = 'none';
+            if (event.target === bulkModal) bulkModal.style.display = 'none';
+            if (event.target === emailDetailModal) emailDetailModal.style.display = 'none';
+        });
+
+        // Close buttons for email detail modal
+        if (closeQuarantineModal) closeQuarantineModal.addEventListener('click', () => emailDetailModal.style.display = 'none');
+        if (closeQuarantineFooter) closeQuarantineFooter.addEventListener('click', () => emailDetailModal.style.display = 'none');
+        
+        // Actions de confirmation
+        confirmRestore.addEventListener('click', async function() {
+            if (!currentEmailId) return;
+            
+            try {
+                const response = await fetch(`/api/quarantine/${currentEmailId}/restore/`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': 'Bearer ' + accessToken,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showAlert('Email restauré avec succès', 'success');
+                    
+                    // Recharger les données
+                    loadQuarantineData();
+                    restoreModal.style.display = 'none';
+                    currentEmailId = null;
+                } else {
+                    const errorText = await response.text();
+                    throw new Error(`Erreur lors de la restauration: ${errorText}`);
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showAlert('Erreur lors de la restauration de l\'email', 'error');
+            }
+        });
+        
+        confirmDelete.addEventListener('click', async function() {
+            if (!currentEmailId) return;
+            
+            try {
+                const response = await fetch(`/api/quarantine/${currentEmailId}/delete/`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': 'Bearer ' + accessToken
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showAlert('Email supprimé définitivement', 'success');
+                    
+                    // Recharger les données
+                    loadQuarantineData();
+                    deleteModal.style.display = 'none';
+                    currentEmailId = null;
+                } else {
+                    const errorText = await response.text();
+                    throw new Error(`Erreur lors de la suppression: ${errorText}`);
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showAlert('Erreur lors de la suppression de l\'email', 'error');
+            }
+        });
+        
+        confirmBulk.addEventListener('click', async function() {
+            if (selectedEmails.size === 0) return;
+            
+            try {
+                const emailIds = Array.from(selectedEmails);
+                let endpoint = '';
+                let method = 'POST';
+                
+                if (currentAction === 'restore') {
+                    endpoint = '/api/quarantine/bulk-restore/';
+                } else if (currentAction === 'delete') {
+                    endpoint = '/api/quarantine/bulk-delete/';
+                }
+                
+                const response = await fetch(endpoint, {
+                    method: method,
+                    headers: {
+                        'Authorization': 'Bearer ' + accessToken,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        email_ids: emailIds,
+                        action: currentAction
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showAlert(data.message || `${emailIds.length} email(s) traité(s) avec succès`, 'success');
+                    
+                    // Recharger les données
+                    selectedEmails.clear();
+                    updateSelectedCount();
+                    toggleBulkActions();
+                    loadQuarantineData();
+                } else {
+                    const errorText = await response.text();
+                    throw new Error(`Erreur lors de l'action groupée: ${errorText}`);
+                }
+                
+                bulkModal.style.display = 'none';
+                currentAction = null;
+                
+            } catch (error) {
+                console.error('Erreur:', error);
+                showAlert(`Erreur lors de l'action groupée: ${error.message}`, 'error');
+            }
+        });
+        
+        // Fonction pour charger les données de quarantaine depuis l'API
+        async function loadQuarantineData() {
+            try {
+                showLoadingState(true);
+                
+                // Construire les paramètres de filtre
+                const params = new URLSearchParams();
+                
+                // Convertir le filtre de type de menace
+                const threatTypeFilter = filterThreatType.value;
+                if (threatTypeFilter !== 'all') {
+                    params.append('threat_type', threatTypeFilter.toUpperCase());
+                }
+                
+                // Ajouter le filtre de date
+                const dateFilter = filterDate.value;
+                if (dateFilter !== 'all') {
+                    params.append('date_filter', dateFilter);
+                }
+                
+                // Ajouter le filtre d'expéditeur
+                const senderFilter = filterSender.value;
+                if (senderFilter !== 'all') {
+                    params.append('sender_filter', senderFilter);
+                }
+                
+                // Ajouter le filtre d'action
+                const actionFilter = filterAction.value;
+                if (actionFilter !== 'all') {
+                    params.append('action', actionFilter);
+                }
+                
+                // Ajouter la pagination
+                params.append('page', currentPage);
+                
+                const url = `/api/quarantine/?${params.toString()}`;
+                console.log('Chargement depuis:', url);
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Bearer ' + accessToken,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.status === 401) {
+                    // Token expiré, essayer de le rafraîchir
+                    const refreshed = await refreshAccessToken();
+                    if (refreshed) {
+                        // Réessayer la requête avec le nouveau token
+                        return loadQuarantineData();
+                    } else {
+                        showAlert('Session expirée. Veuillez vous reconnecter', 'error');
+                        setTimeout(() => {
+                            window.location.href = '/';
+                        }, 2000);
+                        return;
+                    }
+                }
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Erreur API:', errorText);
+                    throw new Error(`Erreur ${response.status}: ${errorText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Données reçues:', data);
+                
+                // Structure attendue: {stats: {...}, quarantined_emails: [...], count: X, next: ..., previous: ...}
+                if (data.quarantined_emails) {
+                    quarantinedEmails = data.quarantined_emails;
+                    filteredEmails = [...quarantinedEmails];
+                    totalItems = data.count || quarantinedEmails.length;
+                    totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+                    
+                    // Mettre à jour les statistiques
+                    if (data.stats) {
+                        updateStatsFromData(data.stats);
+                    } else {
+                        // Calculer les statistiques localement
+                        updateStatsFromEmails(quarantinedEmails);
+                    }
+                    
+                    // Afficher les emails
+                    renderQuarantineTable();
+                    
+                    // Mettre à jour la pagination
+                    renderPagination();
+                    
+                } else if (data.results) {
+                    // Structure paginée alternative
+                    quarantinedEmails = data.results;
+                    filteredEmails = [...quarantinedEmails];
+                    totalItems = data.count || quarantinedEmails.length;
+                    totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+                    
+                    // Mettre à jour les statistiques
+                    if (data.stats) {
+                        updateStatsFromData(data.stats);
+                    } else {
+                        updateStatsFromEmails(quarantinedEmails);
+                    }
+                    
+                    renderQuarantineTable();
+                    renderPagination();
+                } else {
+                    // Structure inconnue, essayer de traiter comme tableau
+                    quarantinedEmails = Array.isArray(data) ? data : [];
+                    filteredEmails = [...quarantinedEmails];
+                    totalItems = quarantinedEmails.length;
+                    totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+                    
+                    updateStatsFromEmails(quarantinedEmails);
+                    renderQuarantineTable();
+                    renderPagination();
+                }
+                
+            } catch (error) {
+                console.error('Erreur détaillée:', error);
+                showAlert('Erreur lors du chargement des données de quarantaine', 'error');
+                
+                // Afficher l'état vide
+                quarantineBody.innerHTML = '';
+                emptyQuarantine.style.display = 'block';
+            } finally {
+                showLoadingState(false);
+            }
+        }
+        
+        // Fonction pour mettre à jour les statistiques depuis les données de l'API
+        function updateStatsFromData(stats) {
+            document.getElementById('totalQuarantined').textContent = stats.total || 0;
+            document.getElementById('malwareCount').textContent = stats.malware || 0;
+            document.getElementById('phishingCount').textContent = stats.phishing || 0;
+            document.getElementById('oldestDays').textContent = stats.oldest_days || 0;
+            document.getElementById('totalCount').textContent = stats.total || 0;
+        }
+        
+        // Fonction pour calculer les statistiques depuis les emails
+        function updateStatsFromEmails(emails) {
+            const total = emails.length;
+            const malware = emails.filter(email => {
+                const threatType = email.threat_type || email.threat_type_display;
+                return threatType === 'MALWARE' || threatType === 'malware';
+            }).length;
+            
+            const phishing = emails.filter(email => {
+                const threatType = email.threat_type || email.threat_type_display;
+                return threatType === 'PHISHING' || threatType === 'phishing';
+            }).length;
+            
+            // Calculer le plus ancien
+            let oldest = 0;
+            if (emails.length > 0) {
+                const now = new Date();
+                const oldestDate = emails.reduce((oldest, email) => {
+                    const date = new Date(email.quarantined_at || email.date || email.received_date);
+                    return date < oldest ? date : oldest;
+                }, now);
+                
+                const diffTime = Math.abs(now - oldestDate);
+                oldest = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            }
+            
+            document.getElementById('totalQuarantined').textContent = total;
+            document.getElementById('malwareCount').textContent = malware;
+            document.getElementById('phishingCount').textContent = phishing;
+            document.getElementById('oldestDays').textContent = oldest;
+            document.getElementById('totalCount').textContent = total;
+        }
+        
+        // Fonction pour afficher le tableau de quarantaine
+        function renderQuarantineTable() {
+            if (filteredEmails.length === 0) {
+                quarantineBody.innerHTML = '';
+                emptyQuarantine.style.display = 'block';
+                displayCount.textContent = '0';
+                return;
+            }
+            
+            emptyQuarantine.style.display = 'none';
+            displayCount.textContent = filteredEmails.length;
+            
+            let html = '';
+            filteredEmails.forEach(email => {
+                const isSelected = selectedEmails.has(email.id);
+                const senderName = email.sender_name || email.sender || 'Inconnu';
+                const senderEmail = email.sender || 'inconnu@example.com';
+                const initial = senderName.charAt(0).toUpperCase();
+                
+                // Utiliser threat_type qui est retourné par l'API
+                const threatType = email.threat_type || 'SUSPICIOUS';
+                const threatScore = email.risk_score || 0;
+                const analysisSummary = email.analysis_summary || 'Aucune analyse disponible';
+                
+                // Créer un preview du sujet
+                const subject = email.subject || 'Sans objet';
+                const date = email.formatted_date || email.received_date || 'Date inconnue';
+                const quarantinedSince = email.quarantined_since || 'Date inconnue';
+                
+                // Déterminer la classe du badge de menace
+                let threatClass = 'threat-phishing';
+                let threatText = 'Phishing';
+                
+                if (threatType === 'MALWARE' || threatType === 'malware') {
+                    threatClass = 'threat-malware';
+                    threatText = 'Malware';
+                } else if (threatType === 'SPAM' || threatType === 'spam') {
+                    threatClass = 'threat-spam';
+                    threatText = 'Spam';
+                } else if (threatType === 'SUSPICIOUS' || threatType === 'suspicious') {
+                    threatClass = 'threat-phishing';
+                    threatText = 'Suspect';
+                }
+                
+                html += `
+                <tr>
+                    <td>
+                        <input type="checkbox" class="email-checkbox" data-id="${email.id}" ${isSelected ? 'checked' : ''}>
+                    </td>
+                    <td>
+                        <div class="email-sender">
+                            <div class="sender-avatar">${initial}</div>
+                            <div class="sender-info">
+                                <div class="sender-name">${escapeHtml(senderName)}</div>
+                                <div class="sender-email">${escapeHtml(senderEmail)}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="email-subject">${escapeHtml(subject)}</div>
+                        <div class="tooltip">
+                            <small style="color: var(--gray); font-size: 11px;">${escapeHtml(analysisSummary)}</small>
+                            <span class="tooltip-text">${escapeHtml(analysisSummary)}</span>
+                        </div>
+                    </td>
+                    <td>${date}</td>
+                    <td><span class="threat-badge ${threatClass}">${threatText}</span></td>
+                    <td><strong>${threatScore}%</strong></td>
+                    <td>${quarantinedSince}</td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="action-btn view" onclick="viewEmailDetail(${email.id})" title="Voir les détails">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="action-btn restore" onclick="restoreEmail(${email.id})" title="Restaurer l'email">
+                                <i class="fas fa-undo"></i>
+                            </button>
+                            <button class="action-btn delete" onclick="deleteEmail(${email.id})" title="Supprimer définitivement">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                `;
+            });
+            
+            quarantineBody.innerHTML = html;
+            
+            // Ajouter les écouteurs d'événements aux cases à cocher
+            document.querySelectorAll('.email-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const emailId = parseInt(this.dataset.id);
+                    if (this.checked) {
+                        selectedEmails.add(emailId);
+                    } else {
+                        selectedEmails.delete(emailId);
+                    }
+                    
+                    // Mettre à jour la case "Tout sélectionner"
+                    const allChecked = Array.from(document.querySelectorAll('.email-checkbox')).every(cb => cb.checked);
+                    selectAllCheckbox.checked = allChecked;
+                    bulkCheckbox.checked = allChecked;
+                    
+                    updateSelectedCount();
+                    toggleBulkActions();
+                });
+            });
+        }
+        
+        // Fonction pour afficher la pagination
+        function renderPagination() {
+            const pagination = document.getElementById('pagination');
+            
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+            
+            let html = '';
+            
+            // Bouton précédent
+            html += `
+            <button class="pagination-btn" id="prevPage" ${currentPage === 1 ? 'disabled' : ''}>
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            `;
+            
+            // Pages
+            const maxVisiblePages = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+            
+            // Ajuster si on est proche de la fin
+            if (endPage - startPage + 1 < maxVisiblePages) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1);
+            }
+            
+            // Première page
+            if (startPage > 1) {
+                html += `
+                <button class="pagination-btn" data-page="1">1</button>
+                ${startPage > 2 ? '<span>...</span>' : ''}
+                `;
+            }
+            
+            // Pages visibles
+            for (let i = startPage; i <= endPage; i++) {
+                html += `
+                <button class="pagination-btn ${i === currentPage ? 'active' : ''}" data-page="${i}">
+                    ${i}
+                </button>
+                `;
+            }
+            
+            // Dernière page
+            if (endPage < totalPages) {
+                html += `
+                ${endPage < totalPages - 1 ? '<span>...</span>' : ''}
+                <button class="pagination-btn" data-page="${totalPages}">${totalPages}</button>
+                `;
+            }
+            
+            // Bouton suivant
+            html += `
+            <button class="pagination-btn" id="nextPage" ${currentPage === totalPages ? 'disabled' : ''}>
+                <i class="fas fa-chevron-right"></i>
+            </button>
+            `;
+            
+            pagination.innerHTML = html;
+            
+            // Ajouter les écouteurs d'événements
+            document.getElementById('prevPage')?.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    loadQuarantineData();
+                }
+            });
+            
+            document.getElementById('nextPage')?.addEventListener('click', () => {
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    loadQuarantineData();
+                }
+            });
+            
+            document.querySelectorAll('.pagination-btn[data-page]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    currentPage = parseInt(btn.dataset.page);
+                    loadQuarantineData();
+                });
+            });
+        }
+        
+        // Fonction pour mettre à jour le compteur de sélection
+        function updateSelectedCount() {
+            selectedCount.textContent = selectedEmails.size;
+        }
+        
+        // Fonction pour afficher/masquer les actions groupées
+        function toggleBulkActions() {
+            if (selectedEmails.size > 0) {
+                bulkActions.style.display = 'flex';
+            } else {
+                bulkActions.style.display = 'none';
+                selectAllCheckbox.checked = false;
+                bulkCheckbox.checked = false;
+            }
+        }
+        
+        // Fonctions globales pour les boutons d'action
+        window.restoreEmail = function(emailId) {
+            const email = filteredEmails.find(e => e.id === emailId);
+            if (!email) return;
+            
+            currentEmailId = emailId;
+            const restoreMessage = document.getElementById('restoreMessage');
+            restoreMessage.textContent = `Êtes-vous sûr de vouloir restaurer l'email "${email.subject}" ? Il sera déplacé vers votre boîte de réception.`;
+            restoreModal.style.display = 'flex';
+        };
+        
+        window.deleteEmail = function(emailId) {
+            const email = filteredEmails.find(e => e.id === emailId);
+            if (!email) return;
+            
+            currentEmailId = emailId;
+            const deleteMessage = document.getElementById('deleteMessage');
+            deleteMessage.textContent = `Êtes-vous sûr de vouloir supprimer définitivement l'email "${email.subject}" ? Cette action est irréversible.`;
+            deleteModal.style.display = 'flex';
+        };
+        
+        window.viewEmailDetail = async function(emailId) {
+            try {
+                const email = filteredEmails.find(e => e.id === emailId);
+                if (!email) return;
+
+                const response = await fetch(`/api/quarantine/${emailId}/`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Bearer ' + accessToken
+                    }
+                });
+
+                let emailDetail = email;
+                if (response.ok) {
+                    emailDetail = await response.json();
+                }
+
+                // Construire le HTML du modal
+                const subject = emailDetail.subject || 'Sans objet';
+                const senderName = (emailDetail.sender_name || emailDetail.sender || '').split('@')[0];
+                const senderEmail = emailDetail.sender || '';
+                const date = emailDetail.quarantined_at || emailDetail.received_date || '';
+                const threatType = emailDetail.threat_type || '';
+                const risk = emailDetail.risk_score || 0;
+                const analysis = emailDetail.analysis_summary || '';
+
+                let bodyHtml = '';
+                if (emailDetail.body_html) {
+                    bodyHtml = emailDetail.body_html;
+                } else if (emailDetail.body_text) {
+                    bodyHtml = `<pre style="white-space:pre-wrap;">${escapeHtml(emailDetail.body_text)}</pre>`;
+                } else {
+                    bodyHtml = '<p>Aucun contenu disponible</p>';
+                }
+
+                // Attachments
+                let attachmentsHtml = '';
+                if (emailDetail.attachments) {
+                    try {
+                        const atts = Array.isArray(emailDetail.attachments) ? emailDetail.attachments : JSON.parse(emailDetail.attachments || '[]');
+                        if (atts.length > 0) {
+                            attachmentsHtml = '<ul>' + atts.map(a => `<li>${escapeHtml(a.name || a.filename || a)}</li>`).join('') + '</ul>';
+                        }
+                    } catch (e) {
+                        // ignore parse errors
+                    }
+                }
+
+                quarantineModalBody.innerHTML = `
+                    <div style="margin-bottom:12px">
+                        <strong>Sujet:</strong> ${escapeHtml(subject)}<br>
+                        <strong>Expéditeur:</strong> ${escapeHtml(senderName)} &lt;${escapeHtml(senderEmail)}&gt;<br>
+                        <strong>Date:</strong> ${escapeHtml(date)}<br>
+                        <strong>Type:</strong> ${escapeHtml(threatType)} &nbsp; <strong>Score:</strong> ${risk}%<br>
+                        <small style="color:var(--gray)">${escapeHtml(analysis)}</small>
+                    </div>
+                    <hr>
+                    <div id="quarantineEmailBody">${bodyHtml}</div>
+                    ${attachmentsHtml ? '<hr><div><strong>Pièces jointes:</strong>' + attachmentsHtml + '</div>' : ''}
+                    <div style="margin-top:14px; display:flex; gap:8px; justify-content:flex-end">
+                        <button class="btn btn-success" onclick="restoreEmail(${emailId})"><i class="fas fa-undo"></i> Restaurer</button>
+                        <button class="btn btn-danger" onclick="deleteEmail(${emailId})"><i class="fas fa-trash"></i> Supprimer</button>
+                    </div>
+                `;
+
+                emailDetailModal.style.display = 'flex';
+
+            } catch (error) {
+                console.error('Erreur:', error);
+                showAlert('Erreur lors du chargement des détails de l\'email', 'error');
+            }
+        };
+        
+        // Fonction pour rafraîchir le token d'accès
+        async function refreshAccessToken() {
+            try {
+                const response = await fetch('/api/token/refresh/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        refresh: refreshToken
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    localStorage.setItem('access_token', data.access);
+                    // Si un nouveau refresh token est retourné, le stocker aussi
+                    if (data.refresh) {
+                        localStorage.setItem('refresh_token', data.refresh);
+                    }
+                    return true;
+                } else {
+                    return false;
+                }
+            } catch (error) {
+                console.error('Erreur lors du rafraîchissement du token:', error);
+                return false;
+            }
+        }
+        
+        // Fonction pour gérer la déconnexion
+        async function handleLogout() {
+            try {
+                // Appeler l'API de déconnexion pour blacklister le refresh token
+                const response = await fetch('/api/logout/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + accessToken
+                    },
+                    body: JSON.stringify({
+                        refresh: refreshToken
+                    })
+                });
+                
+                // Supprimer les tokens du localStorage
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
+                
+                // Rediriger vers la page de login
+                window.location.href = '/';
+                
+            } catch (error) {
+                console.error('Erreur lors de la déconnexion:', error);
+                // Supprimer les tokens de toute façon et rediriger
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
+                window.location.href = '/';
+            }
+        }
+        
+        // Fonction pour afficher des alertes
+        function showAlert(message, type) {
+            alertMessage.textContent = message;
+            alertMessage.className = 'alert alert-' + type;
+            alertMessage.style.display = 'block';
+            
+            setTimeout(() => {
+                alertMessage.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Fonction pour afficher/masquer l'état de chargement
+        function showLoadingState(show) {
+            if (show) {
+                refreshButton.innerHTML = '<div class="loading"></div> Chargement...';
+                refreshButton.disabled = true;
+            } else {
+                refreshButton.innerHTML = '<i class="fas fa-sync-alt"></i> Actualiser';
+                refreshButton.disabled = false;
+            }
+        }
+        
+        // Fonction utilitaire pour formater la date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('fr-FR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+        }
+        
+        // Fonction pour échapper le HTML
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Rafraîchir les données toutes les 5 minutes
+        setInterval(() => {
+            loadQuarantineData();
+        }, 300000);
+    });
+</script>
+</body>
+</html>

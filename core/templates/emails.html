@@ -764,10 +764,9 @@
             <ul>
                 <li><a href="/dashboard/"><i class="fas fa-tachometer-alt"></i> <span>Tableau de bord</span></a></li>
                 <li><a href="#" class="active"><i class="fas fa-inbox"></i> <span>Emails analysés</span></a></li>
-                <li><a href="#"><i class="fas fa-exclamation-triangle"></i> <span>Incidents</span></a></li>
-                <li><a href="#"><i class="fas fa-play-circle"></i> <span>Playbooks</span></a></li>
-                <li><a href="#"><i class="fas fa-chart-bar"></i> <span>Statistiques</span></a></li>
-                <li><a href="#"><i class="fas fa-cog"></i> <span>Configuration</span></a></li>
+                <li><a href="/quarantaine/"><i class="fas fa-shield-alt"></i> <span>Quarantaine</span></a></li>
+                <li><a href="/playbooks/"><i class="fas fa-play-circle"></i> <span>Playbooks</span></a></li>
+                <li><a href="/statistiques/"><i class="fas fa-chart-bar"></i> <span>Statistiques</span></a></li>
             </ul>
         </nav>
         
@@ -1582,28 +1581,51 @@ function escapeHtml(text) {
                 }
                 
                 try {
+                    showLoadingState(true);
+                    
                     const response = await fetch(`/api/emails/${emailId}/quarantine/`, {
                         method: 'POST',
                         headers: {
                             'Authorization': 'Bearer ' + accessToken,
                             'Content-Type': 'application/json'
-                        }
+                        },
+                        body: JSON.stringify({
+                            reason: 'Mise en quarantaine manuelle par l\'administrateur'
+                        })
                     });
                     
                     if (response.ok) {
-                        showAlert('Email mis en quarantaine avec succès', 'success');
+                        showAlert('✅ Email mis en quarantaine avec succès', 'success');
                         
-                        // Recharger les données
-                        loadEmailsData();
-                        emailDetailModal.style.display = 'none';
+                        // Fermer le modal
+                        if (emailDetailModal && emailDetailModal.style.display !== 'none') {
+                            emailDetailModal.style.display = 'none';
+                        }
+                        
+                        // Recharger les données après un court délai
+                        setTimeout(() => {
+                            loadEmailsData();
+                        }, 300);
+                        
+                        // Offrir la possibilité d'aller à la quarantaine
+                        showAlertWithAction(
+                            'Email mis en quarantaine. Consultez la page quarantaine pour le gérer.',
+                            'info',
+                            'Voir la quarantaine',
+                            () => {
+                                window.location.href = '/quarantaine/';
+                            }
+                        );
                     } else {
                         const errorText = await response.text();
                         console.error('Erreur API:', errorText);
-                        showAlert('Erreur lors de la mise en quarantaine', 'error');
+                        showAlert('❌ Erreur lors de la mise en quarantaine', 'error');
                     }
                 } catch (error) {
                     console.error('Erreur:', error);
-                    showAlert('Erreur lors de la mise en quarantaine', 'error');
+                    showAlert('❌ Erreur lors de la mise en quarantaine', 'error');
+                } finally {
+                    showLoadingState(false);
                 }
             };
             
@@ -1739,6 +1761,32 @@ function escapeHtml(text) {
                 setTimeout(() => {
                     alertMessage.style.display = 'none';
                 }, 5000);
+            }
+            
+            // Fonction pour afficher des alertes avec action
+            function showAlertWithAction(message, type, actionText, actionCallback) {
+                alertMessage.innerHTML = message;
+                alertMessage.className = 'alert alert-' + type;
+                alertMessage.style.display = 'flex';
+                alertMessage.style.justifyContent = 'space-between';
+                alertMessage.style.alignItems = 'center';
+                
+                if (actionText && actionCallback) {
+                    const actionBtn = document.createElement('button');
+                    actionBtn.textContent = actionText;
+                    actionBtn.className = 'btn btn-sm';
+                    actionBtn.style.marginLeft = '15px';
+                    actionBtn.style.whiteSpace = 'nowrap';
+                    actionBtn.onclick = () => {
+                        actionCallback();
+                        alertMessage.style.display = 'none';
+                    };
+                    alertMessage.appendChild(actionBtn);
+                }
+                
+                setTimeout(() => {
+                    alertMessage.style.display = 'none';
+                }, 8000);
             }
             
             // Fonction pour afficher/masquer l'état de chargement

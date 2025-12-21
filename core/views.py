@@ -17,8 +17,8 @@ from django.utils import timezone
 from datetime import timedelta
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import UntypedToken
-from .serializers import CustomTokenObtainPairSerializer,EmailMessageSerializer
-from .models import EmailAccount, EmailMessage
+from .serializers import CustomTokenObtainPairSerializer,EmailMessageSerializer,QuarantineEmailSerializer
+from .models import EmailAccount, EmailMessage,QuarantineEmail
 from rest_framework import generics, filters
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
@@ -203,7 +203,7 @@ class EmailListView(generics.ListAPIView):
     search_fields = ['sender', 'sender_name', 'subject', 'body_text']
     
     def get_queryset(self):
-        queryset = EmailMessage.objects.all().order_by('-received_date')
+        queryset = EmailMessage.objects.filter(is_quarantined=False).order_by('-received_date')
         
         # Filtre par date
         date_filter = self.request.query_params.get('date_filter', None)
@@ -379,6 +379,25 @@ class QuarantineEmailView(generics.UpdateAPIView):
     
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
+        # Créer un enregistrement de quarantaine
+        quarantine_email = QuarantineEmail.objects.create(
+            original_email=instance,
+            sender=instance.sender,
+            sender_name=instance.sender_name,
+            subject=instance.subject,
+            received_date=instance.received_date,
+            body_text=instance.body_text,
+            body_html=instance.body_html,
+            attachments=instance.attachments,
+            threat_type=instance.threat_type,
+            risk_score=instance.risk_score,
+            analysis_summary=self._get_analysis_summary(instance),
+            quarantined_by=request.user,
+            reason=request.data.get('reason', 'Mise en quarantaine manuelle'),
+            size=instance.size,
+            has_attachments=instance.has_attachments
+        )
+        instance.is_quarantined = True
         instance.threat_level = 'MEDIUM'
         instance.risk_score = 50
         instance.is_read = True
@@ -386,13 +405,243 @@ class QuarantineEmailView(generics.UpdateAPIView):
         
         return Response({
             'message': 'Email mis en quarantaine',
+            'quarantine_id': quarantine_email.id,
             'threatStatus': 'suspicious',
             'threatScore': instance.risk_score
         })
+    def _get_analysis_summary(self, email):
+        """Générer un résumé d'analyse"""
+        if email.threat_type == 'PHISHING':
+            return f"Email de phishing détecté (score: {email.risk_score}%)"
+        elif email.threat_type == 'MALWARE':
+            return f"Email contenant du malware (score: {email.risk_score}%)"
+        elif email.threat_type == 'SPAM':
+            return f"Email de spam suspect (score: {email.risk_score}%)"
+        elif email.threat_type == 'SUSPICIOUS':
+            return f"Email suspect (score: {email.risk_score}%)"
+        else:
+            return f"Email mis en quarantaine (score: {email.risk_score}%)"
     
     # Support POST from frontend convenience
     def post(self, request, *args, **kwargs):
         return self.update(request, *args, **kwargs)
+
+class QuarantineListView(generics.ListAPIView):
+    """API pour récupérer la liste des emails en quarantaine"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = QuarantineEmailSerializer
+    pagination_class = EmailPagination
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    
+    filterset_fields = ['threat_type', 'is_restored', 'has_attachments']
+    search_fields = ['sender', 'sender_name', 'subject', 'body_text']
+    
+    def get_queryset(self):
+        queryset = QuarantineEmail.objects.filter(is_restored=False).order_by('-quarantined_at')
+        
+        # Filtre par type de menace
+        threat_type = self.request.query_params.get('threat_type', None)
+        if threat_type and threat_type != 'all':
+            queryset = queryset.filter(threat_type=threat_type.upper())
+        
+        # Filtre par date
+        date_filter = self.request.query_params.get('date_filter', None)
+        if date_filter:
+            today = timezone.now().date()
+            if date_filter == 'today':
+                queryset = queryset.filter(quarantined_at__date=today)
+            elif date_filter == 'week':
+                week_ago = today - timezone.timedelta(days=7)
+                queryset = queryset.filter(quarantined_at__date__gte=week_ago)
+            elif date_filter == 'month':
+                month_ago = today - timezone.timedelta(days=30)
+                queryset = queryset.filter(quarantined_at__date__gte=month_ago)
+            elif date_filter == 'older':
+                thirty_days_ago = today - timezone.timedelta(days=30)
+                queryset = queryset.filter(quarantined_at__date__lt=thirty_days_ago)
+        
+        # Filtre par expéditeur
+        sender_filter = self.request.query_params.get('sender_filter', None)
+        if sender_filter and sender_filter != 'all':
+            if sender_filter == 'unknown':
+                queryset = queryset.filter(sender_name='')
+            elif sender_filter == 'suspicious':
+                queryset = queryset.filter(sender__icontains='unknown')
+            elif sender_filter == 'blacklisted':
+                # Ici vous pourriez filtrer par une liste noire
+                queryset = queryset.filter(sender__icontains='spam')
+        
+        return queryset
+    
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        # Calculer les statistiques
+        total = queryset.count()
+        phishing_count = queryset.filter(threat_type='PHISHING').count()
+        malware_count = queryset.filter(threat_type='MALWARE').count()
+        spam_count = queryset.filter(threat_type='SPAM').count()
+        
+        # Calculer le plus ancien email en quarantaine
+        oldest = queryset.order_by('quarantined_at').first()
+        oldest_days = 0
+        if oldest:
+            delta = timezone.now() - oldest.quarantined_at
+            oldest_days = delta.days
+        
+        # Paginer les résultats
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            paginated_response = self.get_paginated_response(serializer.data)
+            # Modifier le response data pour inclure les statistiques et quarantined_emails
+            paginated_response.data['stats'] = {
+                'total': total,
+                'phishing': phishing_count,
+                'malware': malware_count,
+                'spam': spam_count,
+                'oldest_days': oldest_days
+            }
+            paginated_response.data['quarantined_emails'] = serializer.data
+            return paginated_response
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'count': total,
+            'results': serializer.data,
+            'stats': {
+                'total': total,
+                'phishing': phishing_count,
+                'malware': malware_count,
+                'spam': spam_count,
+                'oldest_days': oldest_days
+            },
+            'quarantined_emails': serializer.data
+        })
+
+
+class QuarantineDetailView(generics.RetrieveAPIView):
+    """API pour récupérer les détails d'un email en quarantaine"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = QuarantineEmailSerializer
+    queryset = QuarantineEmail.objects.all()
+    lookup_field = 'id'
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+class RestoreQuarantineEmailView(generics.UpdateAPIView):
+    """API pour restaurer un email de la quarantaine"""
+    permission_classes = [IsAuthenticated]
+    queryset = QuarantineEmail.objects.filter(is_restored=False)
+    lookup_field = 'id'
+    
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        
+        # Marquer l'email original comme non quarantaine
+        instance.original_email.is_quarantined = False
+        instance.original_email.save()
+        
+        # Marquer l'email en quarantaine comme restauré
+        instance.is_restored = True
+        instance.restored_at = timezone.now()
+        instance.restored_by = request.user
+        instance.save()
+        
+        return Response({
+            'message': 'Email restauré avec succès',
+            'email_id': instance.original_email.id,
+            'quarantine_id': instance.id
+        })
+    
+    # Support POST from frontend convenience (allow POST to perform restore)
+    def post(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
+
+class DeleteQuarantineEmailView(generics.DestroyAPIView):
+    """API pour supprimer définitivement un email de la quarantaine"""
+    permission_classes = [IsAuthenticated]
+    queryset = QuarantineEmail.objects.filter(is_restored=False)
+    lookup_field = 'id'
+    
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        original_email_id = instance.original_email.id
+        
+        # Supprimer l'email original
+        instance.original_email.delete()
+        
+        # Supprimer l'enregistrement de quarantaine
+        instance.delete()
+        
+        return Response({
+            'message': 'Email supprimé définitivement',
+            'email_id': original_email_id
+        })
+
+class BulkRestoreQuarantineView(APIView):
+    """API pour restaurer plusieurs emails de la quarantaine"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        email_ids = request.data.get('email_ids', [])
+        
+        if not email_ids:
+            return Response({'error': 'Aucun email sélectionné'}, status=400)
+        
+        quarantined_emails = QuarantineEmail.objects.filter(
+            id__in=email_ids, 
+            is_restored=False
+        )
+        
+        restored_count = 0
+        for q_email in quarantined_emails:
+            # Marquer l'email original comme non quarantaine
+            q_email.original_email.is_quarantined = False
+            q_email.original_email.save()
+            
+            # Marquer comme restauré
+            q_email.is_restored = True
+            q_email.restored_at = timezone.now()
+            q_email.restored_by = request.user
+            q_email.save()
+            restored_count += 1
+        
+        return Response({
+            'message': f'{restored_count} email(s) restauré(s) avec succès',
+            'restored_count': restored_count
+        })
+
+class BulkDeleteQuarantineView(APIView):
+    """API pour supprimer plusieurs emails de la quarantaine"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        email_ids = request.data.get('email_ids', [])
+        
+        if not email_ids:
+            return Response({'error': 'Aucun email sélectionné'}, status=400)
+        
+        quarantined_emails = QuarantineEmail.objects.filter(
+            id__in=email_ids, 
+            is_restored=False
+        )
+        
+        deleted_count = 0
+        for q_email in quarantined_emails:
+            # Supprimer l'email original
+            q_email.original_email.delete()
+            q_email.delete()
+            deleted_count += 1
+        
+        return Response({
+            'message': f'{deleted_count} email(s) supprimé(s) définitivement',
+            'deleted_count': deleted_count
+        })
+
 
 # Vue API pour supprimer un email
 class DeleteEmailView(generics.DestroyAPIView):
@@ -426,3 +675,19 @@ class StartScanView(APIView):
             'scan_id': 'scan_' + str(int(timezone.now().timestamp())),
             'status': 'started'
         })
+    
+# Vue pour la page HTML des playbooks
+def playbooks_page(request):
+    """Page des playbooks protégée"""
+    return render(request, "playbooks.html")
+
+
+#vue pour la page HTML des quarantaines
+def quarantaine_page(request):
+    """Page des quarantaines protégée"""
+    return render(request, "quarantaine.html")
+
+#vue pour la page HTML des statiqtiques
+def statistiques_page(request):
+    """Page des statistiques protégée"""
+    return render(request, "statistiques.html")

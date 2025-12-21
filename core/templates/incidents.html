@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOAR-Mail - Incidents & Playbooks</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #4361ee;
+            --primary-dark: #3a56d4;
+            --secondary: #7209b7;
+            --danger: #f72585;
+            --warning: #f8961e;
+            --success: #4cc9f0;
+            --info: #4895ef;
+            --dark: #212529;
+            --light: #f8f9fa;
+            --gray: #6c757d;
+            --border-radius: 12px;
+            --box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            --sidebar-width: 250px;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f7fb;
+            color: var(--dark);
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar - EXACTEMENT comme vos autres pages */
+        .sidebar {
+            width: var(--sidebar-width);
+            background: linear-gradient(to bottom, var(--primary), var(--secondary));
+            color: white;
+            padding: 25px 0;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+        
+        .sidebar-header {
+            padding: 0 25px 25px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+        }
+        
+        .sidebar-header h2 {
+            font-size: 22px;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .sidebar-header h2 i {
+            margin-right: 10px;
+        }
+        
+        .sidebar-header p {
+            font-size: 13px;
+            opacity: 0.8;
+        }
+        
+        .sidebar-menu {
+            padding: 25px 0;
+        }
+        
+        .sidebar-menu ul {
+            list-style: none;
+        }
+        
+        .sidebar-menu li {
+            margin-bottom: 5px;
+        }
+        
+        .sidebar-menu a {
+            display: flex;
+            align-items: center;
+            padding: 12px 25px;
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .sidebar-menu a:hover, .sidebar-menu a.active {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-left: 4px solid var(--success);
+        }
+        
+        .sidebar-menu i {
+            margin-right: 12px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .sidebar-footer {
+            padding: 25px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+        }
+        
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+        }
+        
+        .user-details h4 {
+            font-size: 14px;
+            margin-bottom: 3px;
+        }
+        
+        .user-details p {
+            font-size: 12px;
+            opacity: 0.8;
+        }
+        
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: var(--sidebar-width);
+            padding: 25px;
+        }
+        
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            color: var(--dark);
+        }
+        
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .btn i {
+            margin-right: 8px;
+        }
+        
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-dark);
+        }
+        
+        .btn-secondary {
+            background-color: rgba(67, 97, 238, 0.1);
+            color: var(--primary);
+        }
+        
+        .btn-secondary:hover {
+            background-color: rgba(67, 97, 238, 0.2);
+        }
+        
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background-color: #d1146a;
+        }
+        
+        .btn-success {
+            background-color: var(--success);
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background-color: #3ab0d6;
+        }
+        
+        .btn-warning {
+            background-color: var(--warning);
+            color: white;
+        }
+        
+        .btn-warning:hover {
+            background-color: #e08715;
+        }
+        
+        .btn-logout {
+            background-color: rgba(247, 37, 133, 0.1);
+            color: var(--danger);
+        }
+        
+        .btn-logout:hover {
+            background-color: var(--danger);
+            color: white;
+        }
+        
+        /* Alert */
+        .alert {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            display: none;
+        }
+        
+        .alert-error {
+            background-color: #fee;
+            border: 1px solid #fcc;
+            color: #c00;
+        }
+        
+        .alert-success {
+            background-color: #efe;
+            border: 1px solid #cfc;
+            color: #0c0;
+        }
+        
+        /* Stats Cards - SIMPLES */
+        .stats-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 20px;
+            box-shadow: var(--box-shadow);
+            transition: transform 0.3s;
+            border-left: 5px solid var(--primary);
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-3px);
+        }
+        
+        .stat-card.danger {
+            border-left-color: var(--danger);
+        }
+        
+        .stat-card.warning {
+            border-left-color: var(--warning);
+        }
+        
+        .stat-card.success {
+            border-left-color: var(--success);
+        }
+        
+        .stat-card.info {
+            border-left-color: var(--info);
+        }
+        
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .stat-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            color: white;
+        }
+        
+        .stat-card.danger .stat-icon {
+            background-color: var(--danger);
+        }
+        
+        .stat-card.warning .stat-icon {
+            background-color: var(--warning);
+        }
+        
+        .stat-card.success .stat-icon {
+            background-color: var(--success);
+        }
+        
+        .stat-card.info .stat-icon {
+            background-color: var(--info);
+        }
+        
+        .stat-content h3 {
+            font-size: 32px;
+            margin-bottom: 5px;
+        }
+        
+        .stat-content p {
+            color: var(--gray);
+            font-size: 14px;
+        }
+        
+        /* Tabs pour basculer entre Incidents et Playbooks */
+        .tabs {
+            display: flex;
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 5px;
+            margin-bottom: 25px;
+            box-shadow: var(--box-shadow);
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            border: none;
+            background: none;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.3s;
+            color: var(--gray);
+        }
+        
+        .tab.active {
+            background-color: var(--primary);
+            color: white;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* Table des Incidents - SIMPLE */
+        .incidents-card {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 25px;
+            box-shadow: var(--box-shadow);
+            margin-bottom: 25px;
+        }
+        
+        .incidents-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .incidents-header h3 {
+            font-size: 18px;
+            color: var(--dark);
+        }
+        
+        .incidents-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .incidents-table th {
+            text-align: left;
+            padding: 12px 15px;
+            border-bottom: 2px solid #eee;
+            color: var(--gray);
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .incidents-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .incidents-table tr:hover {
+            background-color: #f9f9f9;
+        }
+        
+        .threat-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: inline-block;
+        }
+        
+        .threat-high {
+            background-color: rgba(247, 37, 133, 0.1);
+            color: var(--danger);
+        }
+        
+        .threat-medium {
+            background-color: rgba(248, 150, 30, 0.1);
+            color: var(--warning);
+        }
+        
+        .threat-low {
+            background-color: rgba(76, 201, 240, 0.1);
+            color: var(--success);
+        }
+        
+        .action-btn {
+            padding: 6px 12px;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+            background-color: white;
+            color: var(--gray);
+            cursor: pointer;
+            font-size: 12px;
+            margin-right: 5px;
+            transition: all 0.3s;
+        }
+        
+        .action-btn:hover {
+            background-color: #f5f5f5;
+        }
+        
+        .action-btn.resolve {
+            border-color: var(--success);
+            color: var(--success);
+        }
+        
+        .action-btn.resolve:hover {
+            background-color: var(--success);
+            color: white;
+        }
+        
+        .action-btn.view {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        
+        .action-btn.view:hover {
+            background-color: var(--primary);
+            color: white;
+        }
+        
+        /* Playbooks Cards */
+        .playbooks-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .playbook-card {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 20px;
+            box-shadow: var(--box-shadow);
+            border-top: 4px solid var(--primary);
+            transition: transform 0.3s;
+        }
+        
+        .playbook-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .playbook-card.active {
+            border-top-color: var(--success);
+        }
+        
+        .playbook-card.inactive {
+            border-top-color: var(--gray);
+            opacity: 0.8;
+        }
+        
+        .playbook-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .playbook-header h4 {
+            font-size: 16px;
+            color: var(--dark);
+        }
+        
+        .playbook-status {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status-active {
+            background-color: rgba(76, 201, 240, 0.1);
+            color: var(--success);
+        }
+        
+        .status-inactive {
+            background-color: rgba(108, 117, 125, 0.1);
+            color: var(--gray);
+        }
+        
+        .playbook-conditions {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px;
+            margin: 15px 0;
+            font-size: 13px;
+        }
+        
+        .playbook-conditions h5 {
+            margin-bottom: 8px;
+            color: var(--gray);
+        }
+        
+        .playbook-conditions ul {
+            margin-left: 20px;
+            color: var(--dark);
+        }
+        
+        .playbook-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        /* New Playbook Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background-color: white;
+            border-radius: var(--border-radius);
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+        
+        .modal-header {
+            padding: 20px 25px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-header h3 {
+            font-size: 20px;
+            color: var(--dark);
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            color: var(--gray);
+            cursor: pointer;
+        }
+        
+        .modal-body {
+            padding: 25px;
+        }
+        
+        .modal-footer {
+            padding: 20px 25px;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--dark);
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+        
+        /* No Data */
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: var(--gray);
+        }
+        
+        .no-data i {
+            font-size: 48px;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+        
+        /* Responsive */
+        @media (max-width: 992px) {
+            .sidebar {
+                width: 70px;
+                overflow-x: hidden;
+            }
+            
+            .sidebar-header h2 span, 
+            .sidebar-header p,
+            .sidebar-menu a span,
+            .user-details {
+                display: none;
+            }
+            
+            .sidebar-menu a {
+                justify-content: center;
+                padding: 15px;
+            }
+            
+            .sidebar-menu i {
+                margin-right: 0;
+                font-size: 20px;
+            }
+            
+            .main-content {
+                margin-left: 70px;
+            }
+            
+            .sidebar-footer {
+                padding: 15px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .stats-cards {
+                grid-template-columns: 1fr;
+            }
+            
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            
+            .header-actions {
+                width: 100%;
+                justify-content: space-between;
+            }
+            
+            .playbooks-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .tabs {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar (identique à votre page emails) -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h2><i class="fas fa-shield-alt"></i> <span>SOAR-Mail</span></h2>
+            <p>Security Orchestration</p>
+        </div>
+        
+        <nav class="sidebar-menu">
+            <ul>
+                <li><a href="/dashboard/"><i class="fas fa-tachometer-alt"></i> <span>Tableau de bord</span></a></li>
+                <li><a href="/emails/"><i class="fas fa-inbox"></i> <span>Emails analysés</span></a></li>
+                <li><a href="#" class="active"><i class="fas fa-exclamation-triangle"></i> <span>Incidents</span></a></li>
+                <li><a href="/playbooks/"><i class="fas fa-play-circle"></i> <span>Playbooks</span></a></li>
+                <li><a href="/stats/"><i class="fas fa-chart-bar"></i> <span>Statistiques</span></a></li>
+                <li><a href="/config/"><i class="fas fa-cog"></i> <span>Configuration</span></a></li>
+            </ul>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="user-details">
+                    <h4 id="userEmail">Admin</h4>
+                    <p>Administrateur</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Header -->
+        <div class="header">
+            <h1>Gestion des Incidents & Playbooks</h1>
+            <div class="header-actions">
+                <button class="btn btn-secondary" onclick="window.location.href='/emails/'">
+                    <i class="fas fa-arrow-left"></i> Retour aux emails
+                </button>
+                <button class="btn btn-primary" id="newPlaybookBtn">
+                    <i class="fas fa-plus"></i> Nouveau Playbook
+                </button>
+                <button class="btn btn-logout" id="logoutButton">
+                    <i class="fas fa-sign-out-alt"></i> Déconnexion
+                </button>
+            </div>
+        </div>
+        
+        <!-- Alert Message -->
+        <div id="alertMessage" class="alert"></div>
+        
+        <!-- Stats Cards -->
+        <div class="stats-cards">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                </div>
+                <div class="stat-content">
+                    <h3 id="totalIncidents">0</h3>
+                    <p>Incidents actifs</p>
+                </div>
+            </div>
+            
+            <div class="stat-card warning">
+                <div class="stat-header">
+                    <div class="stat-icon">
+                        <i class="fas fa-play-circle"></i>
+                    </div>
+                </div>
+                <div class="stat-content">
+                    <h3 id="activePlaybooks">0</h3>
+                    <p>Playbooks actifs</p>
+                </div>
+            </div>
+            
+            <div class="stat-card success">
+                <div class="stat-header">
+                    <div class="stat-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                </div>
+                <div class="stat-content">
+                    <h3 id="resolvedIncidents">0</h3>
+                    <p>Incidents résolus</p>
+                </div>
+            </div>
+            
+            <div class="stat-card info">
+                <div class="stat-header">
+                    <div class="stat-icon">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                </div>
+                <div class="stat-content">
+                    <h3 id="autoActions">0</h3>
+                    <p>Actions automatiques</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tabs pour basculer entre Incidents et Playbooks -->
+        <div class="tabs">
+            <button class="tab active" data-tab="incidents">
+                <i class="fas fa-exclamation-triangle"></i> Incidents
+            </button>
+            <button class="tab" data-tab="playbooks">
+                <i class="fas fa-play-circle"></i> Playbooks
+            </button>
+        </div>
+        
+        <!-- Onglet Incidents -->
+        <div class="tab-content active" id="incidentsTab">
+            <div class="incidents-card">
+                <div class="incidents-header">
+                    <h3>Incidents récents (emails malveillants)</h3>
+                    <button class="btn btn-secondary" onclick="refreshIncidents()">
+                        <i class="fas fa-sync-alt"></i> Actualiser
+                    </button>
+                </div>
+                
+                <div id="incidentsTable">
+                    <table class="incidents-table">
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Expéditeur</th>
+                                <th>Type de menace</th>
+                                <th>Score</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="incidentsBody">
+                            <!-- Les incidents seront chargés ici -->
+                        </tbody>
+                    </table>
+                    <div id="noIncidents" class="no-data">
+                        <i class="fas fa-check-circle"></i>
+                        <p>Aucun incident actif</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Onglet Playbooks -->
+        <div class="tab-content" id="playbooksTab">
+            <div class="incidents-card">
+                <div class="incidents-header">
+                    <h3>Playbooks de sécurité</h3>
+                    <p>Automatisez la réponse aux incidents</p>
+                </div>
+                
+                <div class="playbooks-grid" id="playbooksContainer">
+                    <!-- Les playbooks seront chargés ici -->
+                </div>
+                <div id="noPlaybooks" class="no-data">
+                    <i class="fas fa-play-circle"></i>
+                    <p>Aucun playbook configuré</p>
+                    <button class="btn btn-primary" id="createFirstPlaybook">
+                        <i class="fas fa-plus"></i> Créer votre premier playbook
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal pour créer un nouveau playbook -->
+    <div class="modal" id="playbookModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Créer un nouveau playbook</h3>
+                <button class="modal-close" id="closeModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="playbookName">Nom du playbook</label>
+                    <input type="text" class="form-control" id="playbookName" placeholder="Ex: Bloquer les expéditeurs malveillants">
+                </div>
+                
+                <div class="form-group">
+                    <label for="playbookDescription">Description</label>
+                    <textarea class="form-control" id="playbookDescription" rows="3" placeholder="Description du playbook"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Conditions de déclenchement</label>
+                    <div class="playbook-conditions">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="conditionPhishing" value="phishing">
+                            <label for="conditionPhishing">Email de type Phishing</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="conditionMalware" value="malware">
+                            <label for="conditionMalware">Email avec malware détecté</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="conditionScore" value="score_high">
+                            <label for="conditionScore">Score de risque > 80%</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="conditionSender" value="sender_blacklist">
+                            <label for="conditionSender">Expéditeur dans liste noire</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Actions à exécuter</label>
+                    <div class="playbook-conditions">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="actionQuarantine" value="quarantine">
+                            <label for="actionQuarantine">Mettre en quarantaine l'email</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="actionBlockSender" value="block_sender">
+                            <label for="actionBlockSender">Bloquer l'expéditeur</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="actionAlert" value="send_alert">
+                            <label for="actionAlert">Envoyer une alerte par email</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="actionLog" value="log_incident">
+                            <label for="actionLog">Journaliser l'incident</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="playbookStatus">Statut</label>
+                    <select class="form-control" id="playbookStatus">
+                        <option value="active">Actif</option>
+                        <option value="inactive">Inactif</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelPlaybook">Annuler</button>
+                <button class="btn btn-primary" id="savePlaybook">Enregistrer le playbook</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Éléments DOM
+            const alertMessage = document.getElementById('alertMessage');
+            const logoutButton = document.getElementById('logoutButton');
+            const newPlaybookBtn = document.getElementById('newPlaybookBtn');
+            const createFirstPlaybookBtn = document.getElementById('createFirstPlaybook');
+            const playbookModal = document.getElementById('playbookModal');
+            const closeModal = document.getElementById('closeModal');
+            const cancelPlaybook = document.getElementById('cancelPlaybook');
+            const savePlaybook = document.getElementById('savePlaybook');
+            const tabs = document.querySelectorAll('.tab');
+            
+            // Variables
+            let playbooks = [];
+            let incidents = [];
+            
+            // Charger les données initiales
+            loadIncidents();
+            loadPlaybooks();
+            
+            // Gestionnaires d'événements pour les tabs
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabId = tab.dataset.tab;
+                    
+                    // Mettre à jour les tabs
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    
+                    // Afficher le contenu correspondant
+                    document.querySelectorAll('.tab-content').forEach(content => {
+                        content.classList.remove('active');
+                    });
+                    document.getElementById(tabId + 'Tab').classList.add('active');
+                });
+            });
+            
+            // Gestionnaires d'événements pour les modals
+            newPlaybookBtn.addEventListener('click', () => {
+                playbookModal.style.display = 'flex';
+            });
+            
+            createFirstPlaybookBtn?.addEventListener('click', () => {
+                playbookModal.style.display = 'flex';
+            });
+            
+            closeModal.addEventListener('click', () => {
+                playbookModal.style.display = 'none';
+            });
+            
+            cancelPlaybook.addEventListener('click', () => {
+                playbookModal.style.display = 'none';
+                resetPlaybookForm();
+            });
+            
+            // Fermer la modal en cliquant en dehors
+            window.addEventListener('click', (event) => {
+                if (event.target === playbookModal) {
+                    playbookModal.style.display = 'none';
+                    resetPlaybookForm();
+                }
+            });
+            
+            // Sauvegarder un playbook
+            savePlaybook.addEventListener('click', saveNewPlaybook);
+            
+            // Gestionnaire de déconnexion
+            logoutButton.addEventListener('click', () => {
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
+                window.location.href = '/';
+            });
+            
+            // Fonction pour charger les incidents
+            async function loadIncidents() {
+                try {
+                    const accessToken = localStorage.getItem('access_token');
+                    
+                    // Simuler des incidents (remplacez par un appel API réel)
+                    setTimeout(() => {
+                        incidents = [
+                            {
+                                id: 1,
+                                email: 'fraude@example.com',
+                                sender: 'fraude@example.com',
+                                threatType: 'Phishing',
+                                score: 95,
+                                date: '2023-10-15 14:30',
+                                status: 'actif'
+                            },
+                            {
+                                id: 2,
+                                email: 'virus@malware.com',
+                                sender: 'virus@malware.com',
+                                threatType: 'Malware',
+                                score: 88,
+                                date: '2023-10-15 11:15',
+                                status: 'actif'
+                            },
+                            {
+                                id: 3,
+                                email: 'spam@promo.com',
+                                sender: 'spam@promo.com',
+                                threatType: 'Spam',
+                                score: 65,
+                                date: '2023-10-15 09:45',
+                                status: 'résolu'
+                            }
+                        ];
+                        
+                        updateIncidentsDisplay();
+                        updateStats();
+                    }, 500);
+                    
+                } catch (error) {
+                    console.error('Erreur:', error);
+                    showAlert('Erreur lors du chargement des incidents', 'error');
+                }
+            }
+            
+            // Fonction pour charger les playbooks
+            async function loadPlaybooks() {
+                try {
+                    // Simuler des playbooks (remplacez par un appel API réel)
+                    setTimeout(() => {
+                        playbooks = [
+                            {
+                                id: 1,
+                                name: 'Bloquer Phishing',
+                                description: 'Bloque automatiquement les emails de phishing',
+                                conditions: ['phishing', 'score_high'],
+                                actions: ['block_sender', 'log_incident'],
+                                status: 'active',
+                                executions: 15
+                            },
+                            {
+                                id: 2,
+                                name: 'Quarantaine Malware',
+                                description: 'Met en quarantaine les emails contenant du malware',
+                                conditions: ['malware'],
+                                actions: ['quarantine', 'send_alert'],
+                                status: 'active',
+                                executions: 8
+                            },
+                            {
+                                id: 3,
+                                name: 'Alerte Spam',
+                                description: 'Envoie une alerte pour les spams suspects',
+                                conditions: ['sender_blacklist'],
+                                actions: ['send_alert', 'log_incident'],
+                                status: 'inactive',
+                                executions: 0
+                            }
+                        ];
+                        
+                        updatePlaybooksDisplay();
+                        updateStats();
+                    }, 500);
+                    
+                } catch (error) {
+                    console.error('Erreur:', error);
+                    showAlert('Erreur lors du chargement des playbooks', 'error');
+                }
+            }
+            
+            // Fonction pour mettre à jour l'affichage des incidents
+            function updateIncidentsDisplay() {
+                const incidentsBody = document.getElementById('incidentsBody');
+                const noIncidents = document.getElementById('noIncidents');
+                
+                if (incidents.length === 0) {
+                    incidentsBody.innerHTML = '';
+                    noIncidents.style.display = 'block';
+                    return;
+                }
+                
+                noIncidents.style.display = 'none';
+                
+                let html = '';
+                incidents.forEach(incident => {
+                    let threatClass = 'threat-high';
+                    if (incident.score < 70) threatClass = 'threat-low';
+                    else if (incident.score < 85) threatClass = 'threat-medium';
+                    
+                    html += `
+                    <tr>
+                        <td>${incident.email}</td>
+                        <td>${incident.sender}</td>
+                        <td>${incident.threatType}</td>
+                        <td><span class="threat-badge ${threatClass}">${incident.score}%</span></td>
+                        <td>${incident.date}</td>
+                        <td>
+                            <button class="action-btn view" onclick="viewIncident(${incident.id})">
+                                <i class="fas fa-eye"></i> Voir
+                            </button>
+                            <button class="action-btn resolve" onclick="resolveIncident(${incident.id})">
+                                <i class="fas fa-check"></i> Résoudre
+                            </button>
+                        </td>
+                    </tr>
+                    `;
+                });
+                
+                incidentsBody.innerHTML = html;
+            }
+            
+            // Fonction pour mettre à jour l'affichage des playbooks
+            function updatePlaybooksDisplay() {
+                const playbooksContainer = document.getElementById('playbooksContainer');
+                const noPlaybooks = document.getElementById('noPlaybooks');
+                
+                if (playbooks.length === 0) {
+                    playbooksContainer.innerHTML = '';
+                    noPlaybooks.style.display = 'block';
+                    return;
+                }
+                
+                noPlaybooks.style.display = 'none';
+                
+                let html = '';
+                playbooks.forEach(playbook => {
+                    const isActive = playbook.status === 'active';
+                    const statusClass = isActive ? 'status-active' : 'status-inactive';
+                    const cardClass = isActive ? 'active' : 'inactive';
+                    
+                    // Formater les conditions
+                    let conditionsHtml = '<ul>';
+                    playbook.conditions.forEach(condition => {
+                        let conditionText = condition;
+                        if (condition === 'phishing') conditionText = 'Email de phishing';
+                        else if (condition === 'malware') conditionText = 'Email avec malware';
+                        else if (condition === 'score_high') conditionText = 'Score de risque > 80%';
+                        else if (condition === 'sender_blacklist') conditionText = 'Expéditeur en liste noire';
+                        conditionsHtml += `<li>${conditionText}</li>`;
+                    });
+                    conditionsHtml += '</ul>';
+                    
+                    // Formater les actions
+                    let actionsHtml = '<ul>';
+                    playbook.actions.forEach(action => {
+                        let actionText = action;
+                        if (action === 'quarantine') actionText = 'Mettre en quarantaine';
+                        else if (action === 'block_sender') actionText = 'Bloquer l\'expéditeur';
+                        else if (action === 'send_alert') actionText = 'Envoyer une alerte';
+                        else if (action === 'log_incident') actionText = 'Journaliser l\'incident';
+                        actionsHtml += `<li>${actionText}</li>`;
+                    });
+                    actionsHtml += '</ul>';
+                    
+                    html += `
+                    <div class="playbook-card ${cardClass}">
+                        <div class="playbook-header">
+                            <h4>${playbook.name}</h4>
+                            <span class="playbook-status ${statusClass}">${isActive ? 'Actif' : 'Inactif'}</span>
+                        </div>
+                        <p>${playbook.description}</p>
+                        
+                        <div class="playbook-conditions">
+                            <h5>Conditions:</h5>
+                            ${conditionsHtml}
+                        </div>
+                        
+                        <div class="playbook-conditions">
+                            <h5>Actions:</h5>
+                            ${actionsHtml}
+                        </div>
+                        
+                        <div class="playbook-actions">
+                            <button class="btn ${isActive ? 'btn-warning' : 'btn-success'}" onclick="togglePlaybook(${playbook.id})">
+                                <i class="fas fa-power-off"></i> ${isActive ? 'Désactiver' : 'Activer'}
+                            </button>
+                            <button class="btn btn-secondary" onclick="editPlaybook(${playbook.id})">
+                                <i class="fas fa-edit"></i> Modifier
+                            </button>
+                            <button class="btn btn-danger" onclick="deletePlaybook(${playbook.id})">
+                                <i class="fas fa-trash"></i> Supprimer
+                            </button>
+                        </div>
+                        <div style="margin-top: 10px; font-size: 12px; color: var(--gray);">
+                            <i class="fas fa-bolt"></i> Exécuté ${playbook.executions} fois
+                        </div>
+                    </div>
+                    `;
+                });
+                
+                playbooksContainer.innerHTML = html;
+            }
+            
+            // Fonction pour mettre à jour les statistiques
+            function updateStats() {
+                // Incidents actifs (score > 70 et non résolus)
+                const activeIncidents = incidents.filter(inc => inc.score > 70 && inc.status !== 'résolu').length;
+                document.getElementById('totalIncidents').textContent = activeIncidents;
+                
+                // Playbooks actifs
+                const activePlaybooks = playbooks.filter(pb => pb.status === 'active').length;
+                document.getElementById('activePlaybooks').textContent = activePlaybooks;
+                
+                // Incidents résolus
+                const resolvedIncidents = incidents.filter(inc => inc.status === 'résolu').length;
+                document.getElementById('resolvedIncidents').textContent = resolvedIncidents;
+                
+                // Actions automatiques (somme des exécutions des playbooks)
+                const totalExecutions = playbooks.reduce((sum, pb) => sum + pb.executions, 0);
+                document.getElementById('autoActions').textContent = totalExecutions;
+            }
+            
+            // Fonction pour sauvegarder un nouveau playbook
+            function saveNewPlaybook() {
+                const name = document.getElementById('playbookName').value;
+                const description = document.getElementById('playbookDescription').value;
+                const status = document.getElementById('playbookStatus').value;
+                
+                // Récupérer les conditions cochées
+                const conditions = [];
+                if (document.getElementById('conditionPhishing').checked) conditions.push('phishing');
+                if (document.getElementById('conditionMalware').checked) conditions.push('malware');
+                if (document.getElementById('conditionScore').checked) conditions.push('score_high');
+                if (document.getElementById('conditionSender').checked) conditions.push('sender_blacklist');
+                
+                // Récupérer les actions cochées
+                const actions = [];
+                if (document.getElementById('actionQuarantine').checked) actions.push('quarantine');
+                if (document.getElementById('actionBlockSender').checked) actions.push('block_sender');
+                if (document.getElementById('actionAlert').checked) actions.push('send_alert');
+                if (document.getElementById('actionLog').checked) actions.push('log_incident');
+                
+                // Validation
+                if (!name || conditions.length === 0 || actions.length === 0) {
+                    showAlert('Veuillez remplir tous les champs obligatoires', 'error');
+                    return;
+                }
+                
+                // Créer un nouvel ID
+                const newId = playbooks.length > 0 ? Math.max(...playbooks.map(p => p.id)) + 1 : 1;
+                
+                // Ajouter le playbook
+                playbooks.push({
+                    id: newId,
+                    name: name,
+                    description: description,
+                    conditions: conditions,
+                    actions: actions,
+                    status: status,
+                    executions: 0
+                });
+                
+                // Mettre à jour l'affichage
+                updatePlaybooksDisplay();
+                updateStats();
+                
+                // Fermer la modal et réinitialiser le formulaire
+                playbookModal.style.display = 'none';
+                resetPlaybookForm();
+                
+                showAlert('Playbook créé avec succès!', 'success');
+            }
+            
+            // Fonction pour réinitialiser le formulaire de playbook
+            function resetPlaybookForm() {
+                document.getElementById('playbookName').value = '';
+                document.getElementById('playbookDescription').value = '';
+                document.getElementById('playbookStatus').value = 'active';
+                
+                // Décocher toutes les cases
+                document.querySelectorAll('#playbookModal input[type="checkbox"]').forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+            }
+            
+            // Fonctions globales pour les boutons
+            window.refreshIncidents = function() {
+                loadIncidents();
+                showAlert('Incidents actualisés', 'success');
+            };
+            
+            window.viewIncident = function(id) {
+                const incident = incidents.find(inc => inc.id === id);
+                if (incident) {
+                    alert(`Détails de l'incident #${id}:\n\nEmail: ${incident.email}\nExpéditeur: ${incident.sender}\nType: ${incident.threatType}\nScore: ${incident.score}%\nDate: ${incident.date}\n\nOuvrez la page emails pour plus de détails.`);
+                }
+            };
+            
+            window.resolveIncident = function(id) {
+                const incident = incidents.find(inc => inc.id === id);
+                if (incident) {
+                    incident.status = 'résolu';
+                    updateIncidentsDisplay();
+                    updateStats();
+                    showAlert(`Incident #${id} marqué comme résolu`, 'success');
+                }
+            };
+            
+            window.togglePlaybook = function(id) {
+                const playbook = playbooks.find(pb => pb.id === id);
+                if (playbook) {
+                    playbook.status = playbook.status === 'active' ? 'inactive' : 'active';
+                    updatePlaybooksDisplay();
+                    updateStats();
+                    showAlert(`Playbook "${playbook.name}" ${playbook.status === 'active' ? 'activé' : 'désactivé'}`, 'success');
+                }
+            };
+            
+            window.editPlaybook = function(id) {
+                const playbook = playbooks.find(pb => pb.id === id);
+                if (playbook) {
+                    // Pré-remplir le formulaire avec les données du playbook
+                    document.getElementById('playbookName').value = playbook.name;
+                    document.getElementById('playbookDescription').value = playbook.description;
+                    document.getElementById('playbookStatus').value = playbook.status;
+                    
+                    // Cocher les conditions
+                    document.getElementById('conditionPhishing').checked = playbook.conditions.includes('phishing');
+                    document.getElementById('conditionMalware').checked = playbook.conditions.includes('malware');
+                    document.getElementById('conditionScore').checked = playbook.conditions.includes('score_high');
+                    document.getElementById('conditionSender').checked = playbook.conditions.includes('sender_blacklist');
+                    
+                    // Cocher les actions
+                    document.getElementById('actionQuarantine').checked = playbook.actions.includes('quarantine');
+                    document.getElementById('actionBlockSender').checked = playbook.actions.includes('block_sender');
+                    document.getElementById('actionAlert').checked = playbook.actions.includes('send_alert');
+                    document.getElementById('actionLog').checked = playbook.actions.includes('log_incident');
+                    
+                    // Ouvrir la modal
+                    playbookModal.style.display = 'flex';
+                    
+                    // Changer le comportement du bouton sauvegarder
+                    savePlaybook.onclick = function() {
+                        // Mettre à jour le playbook
+                        playbook.name = document.getElementById('playbookName').value;
+                        playbook.description = document.getElementById('playbookDescription').value;
+                        playbook.status = document.getElementById('playbookStatus').value;
+                        
+                        // Mettre à jour les conditions
+                        playbook.conditions = [];
+                        if (document.getElementById('conditionPhishing').checked) playbook.conditions.push('phishing');
+                        if (document.getElementById('conditionMalware').checked) playbook.conditions.push('malware');
+                        if (document.getElementById('conditionScore').checked) playbook.conditions.push('score_high');
+                        if (document.getElementById('conditionSender').checked) playbook.conditions.push('sender_blacklist');
+                        
+                        // Mettre à jour les actions
+                        playbook.actions = [];
+                        if (document.getElementById('actionQuarantine').checked) playbook.actions.push('quarantine');
+                        if (document.getElementById('actionBlockSender').checked) playbook.actions.push('block_sender');
+                        if (document.getElementById('actionAlert').checked) playbook.actions.push('send_alert');
+                        if (document.getElementById('actionLog').checked) playbook.actions.push('log_incident');
+                        
+                        // Mettre à jour l'affichage
+                        updatePlaybooksDisplay();
+                        
+                        // Fermer la modal et réinitialiser
+                        playbookModal.style.display = 'none';
+                        resetPlaybookForm();
+                        
+                        // Restaurer le comportement par défaut
+                        savePlaybook.onclick = saveNewPlaybook;
+                        
+                        showAlert('Playbook mis à jour avec succès!', 'success');
+                    };
+                }
+            };
+            
+            window.deletePlaybook = function(id) {
+                if (confirm('Êtes-vous sûr de vouloir supprimer ce playbook ?')) {
+                    playbooks = playbooks.filter(pb => pb.id !== id);
+                    updatePlaybooksDisplay();
+                    updateStats();
+                    showAlert('Playbook supprimé', 'success');
+                }
+            };
+            
+            // Fonction pour afficher des alertes
+            function showAlert(message, type) {
+                alertMessage.textContent = message;
+                alertMessage.className = 'alert alert-' + type;
+                alertMessage.style.display = 'block';
+                
+                setTimeout(() => {
+                    alertMessage.style.display = 'none';
+                }, 3000);
+            }
+        });
+    </script>
+</body>
+</html>

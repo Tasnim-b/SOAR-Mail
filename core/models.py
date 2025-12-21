@@ -3,6 +3,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 class CustomUserManager(BaseUserManager):
     """Manager personnalisé pour utiliser email au lieu de username"""
@@ -127,6 +128,9 @@ class EmailMessage(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)#date de création
     updated_at = models.DateTimeField(auto_now=True)#date de dernière modification
     
+    # Quarantaine
+    is_quarantined = models.BooleanField(default=False, verbose_name="En quarantaine")
+
     def __str__(self):
         return f"{self.sender} - {self.subject[:50]}..."
     
@@ -138,3 +142,214 @@ class EmailMessage(models.Model):
             models.Index(fields=['threat_level', 'received_date']),
             models.Index(fields=['sender', 'received_date']),
         ]
+
+
+# Modèle pour les emails en quarantaine
+class QuarantineEmail(models.Model):
+    """Email mis en quarantaine"""
+    
+    # Types de menaces possibles
+    THREAT_TYPE_CHOICES = [
+        ('PHISHING', 'Phishing'),
+        ('SPAM', 'Spam'),
+        ('MALWARE', 'Malware'),
+        ('SUSPICIOUS', 'Suspect'),
+        ('SPOOFING', 'Usurpation'),
+    ]
+    
+    # Relation avec l'email original
+    original_email = models.OneToOneField(
+        EmailMessage, 
+        on_delete=models.CASCADE, 
+        related_name='quarantine',
+        verbose_name="Email original"
+    )
+    
+    # Informations de base
+    sender = models.EmailField(verbose_name="Expéditeur")
+    sender_name = models.CharField(max_length=200, blank=True, verbose_name="Nom expéditeur")
+    subject = models.TextField(verbose_name="Sujet")
+    received_date = models.DateTimeField(verbose_name="Date réception")
+    
+    # Contenu (stocké pour référence, mais peut être réduit)
+    body_text = models.TextField(blank=True, verbose_name="Corps texte")
+    body_html = models.TextField(blank=True, verbose_name="Corps HTML")
+    attachments = models.JSONField(default=list, verbose_name="Pièces jointes")
+    
+    # Analyse
+    threat_type = models.CharField(
+        max_length=20, 
+        choices=THREAT_TYPE_CHOICES, 
+        default='SUSPICIOUS',
+        verbose_name="Type de menace"
+    )
+    risk_score = models.IntegerField(default=0, verbose_name="Score de risque")
+    analysis_summary = models.TextField(blank=True, verbose_name="Résumé de l'analyse")
+    
+    # Gestion de la quarantaine
+    quarantined_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        verbose_name="Mis en quarantaine par"
+    )
+    quarantined_at = models.DateTimeField(auto_now_add=True, verbose_name="Date de quarantaine")
+    expires_at = models.DateTimeField(null=True, blank=True, verbose_name="Expire le")
+    
+    # Flags
+    is_restored = models.BooleanField(default=False, verbose_name="Restauré")
+    restored_at = models.DateTimeField(null=True, blank=True, verbose_name="Date de restauration")
+    restored_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='restored_quarantine',
+        verbose_name="Restauré par"
+    )
+    
+    # Raison de la quarantaine
+    reason = models.TextField(blank=True, verbose_name="Raison de la quarantaine")
+    
+    # Métadonnées
+    size = models.IntegerField(verbose_name="Taille (octets)", default=0)
+    has_attachments = models.BooleanField(default=False, verbose_name="A des pièces jointes")
+    
+    def __str__(self):
+        return f"Quarantaine: {self.sender} - {self.subject[:50]}..."
+    
+    class Meta:
+        verbose_name = "Email en quarantaine"
+        verbose_name_plural = "Emails en quarantaine"
+        ordering = ['-quarantined_at']
+        indexes = [
+            models.Index(fields=['threat_type', 'quarantined_at']),
+            models.Index(fields=['is_restored', 'quarantined_at']),
+        ]
+    
+    def save(self, *args, **kwargs):
+        # Définir la date d'expiration par défaut (30 jours)
+        if not self.expires_at and not self.is_restored:
+            self.expires_at = timezone.now() + timezone.timedelta(days=30)
+        super().save(*args, **kwargs)
+
+
+# class Playbook(models.Model):
+#     """Playbook SOAR : ensemble de règles et d'actions"""
+#     name = models.CharField(max_length=100, verbose_name="Nom")
+#     description = models.TextField(blank=True, verbose_name="Description")
+#     is_active = models.BooleanField(default=True, verbose_name="Actif")
+#     priority = models.IntegerField(default=1, verbose_name="Priorité (1=le plus haut)")
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+
+#     def __str__(self):
+#         return f"{self.name} (Priorité: {self.priority})"
+
+#     class Meta:
+#         verbose_name = "Playbook"
+#         verbose_name_plural = "Playbooks"
+#         ordering = ['priority', 'name']
+
+
+# class PlaybookRule(models.Model):
+#     """Règle pour déclencher un playbook"""
+    
+#     FIELD_CHOICES = [
+#         ('sender', 'Expéditeur'),
+#         ('subject', 'Sujet'),
+#         ('body_text', 'Corps texte'),
+#         ('body_html', 'Corps HTML'),
+#         ('threat_level', 'Niveau de menace'),
+#         ('threat_type', 'Type de menace'),
+#         ('risk_score', 'Score de risque'),
+#         ('has_attachments', 'A des pièces jointes'),
+#     ]
+    
+#     OPERATOR_CHOICES = [
+#         ('contains', 'Contient'),
+#         ('equals', 'Égal à'),
+#         ('startswith', 'Commence par'),
+#         ('endswith', 'Finit par'),
+#         ('regex', 'Expression régulière'),
+#         ('gt', 'Supérieur à'),
+#         ('gte', 'Supérieur ou égal à'),
+#         ('lt', 'Inférieur à'),
+#         ('lte', 'Inférieur ou égal à'),
+#     ]
+
+#     playbook = models.ForeignKey(Playbook, on_delete=models.CASCADE, related_name='rules')
+#     field = models.CharField(max_length=50, choices=FIELD_CHOICES, verbose_name="Champ")
+#     operator = models.CharField(max_length=50, choices=OPERATOR_CHOICES, verbose_name="Opérateur")
+#     value = models.TextField(verbose_name="Valeur")
+#     negate = models.BooleanField(default=False, verbose_name="Négation (NOT)")
+
+#     class Meta:
+#         verbose_name = "Règle de playbook"
+#         verbose_name_plural = "Règles de playbooks"
+
+#     def __str__(self):
+#         return f"{self.field} {self.operator} '{self.value[:50]}'"
+
+
+# class PlaybookAction(models.Model):
+#     """Action à exécuter quand un playbook est déclenché"""
+    
+#     ACTION_CHOICES = [
+#         ('quarantine', 'Mettre en quarantaine'),
+#         ('delete', 'Supprimer l\'email'),
+#         ('move_to_folder', 'Déplacer vers dossier'),
+#         ('mark_as_read', 'Marquer comme lu'),
+#         ('mark_as_unread', 'Marquer comme non lu'),
+#         ('forward', 'Transférer à'),
+#         ('reply', 'Répondre avec un modèle'),
+#         ('notify', 'Notifier par email'),
+#         ('log_only', 'Seulement journaliser'),
+#         ('create_ticket', 'Créer un ticket'),
+#         ('block_sender', 'Bloquer l\'expéditeur'),
+#     ]
+
+#     playbook = models.ForeignKey(Playbook, on_delete=models.CASCADE, related_name='actions')
+#     action_type = models.CharField(max_length=50, choices=ACTION_CHOICES, verbose_name="Type d'action")
+#     parameters = models.JSONField(default=dict, verbose_name="Paramètres")
+#     order = models.IntegerField(default=1, verbose_name="Ordre d'exécution")
+#     delay_seconds = models.IntegerField(default=0, verbose_name="Délai avant exécution (secondes)")
+
+#     class Meta:
+#         verbose_name = "Action de playbook"
+#         verbose_name_plural = "Actions de playbooks"
+#         ordering = ['order']
+
+#     def __str__(self):
+#         return f"{self.get_action_type_display()} (Ordre: {self.order})"
+
+
+# class IncidentLog(models.Model):
+#     """Journal des incidents et actions exécutées"""
+    
+#     STATUS_CHOICES = [
+#         ('detected', 'Détecté'),
+#         ('quarantined', 'Mis en quarantaine'),
+#         ('deleted', 'Supprimé'),
+#         ('resolved', 'Résolu'),
+#         ('false_positive', 'Faux positif'),
+#     ]
+
+#     email = models.ForeignKey(EmailMessage, on_delete=models.CASCADE, related_name='incidents')
+#     playbook = models.ForeignKey(Playbook, on_delete=models.SET_NULL, null=True, blank=True, related_name='incidents')
+#     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='detected', verbose_name="Statut")
+#     actions_executed = models.JSONField(default=list, verbose_name="Actions exécutées")
+#     notes = models.TextField(blank=True, verbose_name="Notes")
+#     resolved_at = models.DateTimeField(null=True, blank=True, verbose_name="Résolu à")
+#     resolved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='resolved_incidents')
+    
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+
+#     class Meta:
+#         verbose_name = "Journal d'incident"
+#         verbose_name_plural = "Journaux d'incidents"
+#         ordering = ['-created_at']
+
+#     def __str__(self):
+#         return f"Incident #{self.id} - {self.email.subject[:50]}"

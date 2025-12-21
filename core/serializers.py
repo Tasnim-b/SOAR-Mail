@@ -4,7 +4,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import get_user_model
 from django.core.validators import EmailValidator
 from django.core.exceptions import ValidationError
-from .models import EmailAccount, EmailMessage
+from .models import EmailAccount, EmailMessage, QuarantineEmail
 
 User = get_user_model()
 
@@ -121,3 +121,43 @@ class EmailMessageSerializer(serializers.ModelSerializer):
 
 
 
+
+class QuarantineEmailSerializer(serializers.ModelSerializer):
+    """Sérialiseur pour les emails en quarantaine"""
+    
+    quarantined_since = serializers.SerializerMethodField()
+    days_in_quarantine = serializers.SerializerMethodField()
+    original_email_id = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = QuarantineEmail
+        fields = [
+            'id', 'original_email_id', 'sender', 'sender_name', 'subject',
+            'received_date', 'threat_type', 'risk_score', 'analysis_summary',
+            'quarantined_at', 'expires_at', 'quarantined_since',
+            'days_in_quarantine', 'is_restored', 'reason', 'size',
+            'has_attachments', 'body_text', 'body_html', 'attachments'
+        ]
+    
+    def get_quarantined_since(self, obj):
+        """Calculer combien de temps l'email est en quarantaine"""
+        from django.utils import timezone
+        delta = timezone.now() - obj.quarantined_at
+        days = delta.days
+        if days == 0:
+            hours = delta.seconds // 3600
+            if hours == 0:
+                minutes = delta.seconds // 60
+                return f"{minutes} minutes"
+            return f"{hours} heures"
+        return f"{days} jours"
+    
+    def get_days_in_quarantine(self, obj):
+        """Nombre de jours exacts en quarantaine"""
+        from django.utils import timezone
+        delta = timezone.now() - obj.quarantined_at
+        return delta.days
+    
+    def get_original_email_id(self, obj):
+        """ID de l'email original"""
+        return obj.original_email.id
