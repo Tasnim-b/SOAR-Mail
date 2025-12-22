@@ -934,7 +934,6 @@
                 <li><a href="/quarantaine/"><i class="fas fa-shield-alt"></i> <span>Quarantaine</span></a></li>
                 <li><a href="/playbooks/" class="active"><i class="fas fa-play-circle"></i> <span>Playbooks</span></a></li>
                 <li><a href="/statistiques/"><i class="fas fa-chart-bar"></i> <span>Statistiques</span></a></li>
-                <!-- <li><a href="/config/"><i class="fas fa-cog"></i> <span>Configuration</span></a></li> -->
             </ul>
         </nav>
         
@@ -1327,67 +1326,56 @@
             }
             
             // Fonction pour charger les playbooks (simulation)
-            function loadPlaybooks() {
-                // Données de démonstration
-                setTimeout(() => {
-                    playbooks = [
-                        {
-                            id: 1,
-                            name: 'Réponse automatique au phishing',
-                            description: 'Met en quarantaine et journalise les emails de phishing détectés avec un score de risque élevé.',
-                            conditions: ['phishing', 'high_risk', 'urgent'],
-                            actions: ['quarantine', 'log', 'alert', 'block_sender'],
-                            status: 'active',
-                            priority: 'high',
-                            executions: 24,
-                            threats_blocked: 18,
-                            created: '2023-10-15',
-                            updated: '2023-10-20'
-                        },
-                        {
-                            id: 2,
-                            name: 'Gestion des spams suspects',
-                            description: 'Marque comme lu et journalise les emails de spam avec score moyen.',
-                            conditions: ['spam', 'suspicious'],
-                            actions: ['mark_read', 'log', 'forward'],
-                            status: 'active',
-                            priority: 'medium',
-                            executions: 42,
-                            threats_blocked: 32,
-                            created: '2023-10-10',
-                            updated: '2023-10-18'
-                        },
-                        {
-                            id: 3,
-                            name: 'Alerte malware critique',
-                            description: 'Envoie une alerte immédiate pour les emails contenant du malware.',
-                            conditions: ['malware', 'attachment'],
-                            actions: ['alert', 'quarantine', 'delete', 'add_blacklist'],
-                            status: 'active',
-                            priority: 'critical',
-                            executions: 8,
-                            threats_blocked: 8,
-                            created: '2023-10-05',
-                            updated: '2023-10-12'
-                        },
-                        {
-                            id: 4,
-                            name: 'Surveillance expéditeurs blacklist',
-                            description: 'Traite automatiquement les emails provenant d\'expéditeurs en liste noire.',
-                            conditions: ['blacklist'],
-                            actions: ['quarantine', 'delete'],
-                            status: 'inactive',
-                            priority: 'medium',
-                            executions: 15,
-                            threats_blocked: 12,
-                            created: '2023-09-28',
-                            updated: '2023-10-08'
+            // Dans le <script> de playbooks.html, modifiez la fonction loadPlaybooks :
+            async function loadPlaybooks() {
+                try {
+                    const response = await fetch('/api/playbooks/', {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': 'Bearer ' + accessToken,
+                            'Content-Type': 'application/json'
                         }
-                    ];
+                    });
                     
-                    renderPlaybooks();
-                    updateStats();
-                }, 500);
+                    if (response.ok) {
+                        const data = await response.json();
+                        playbooks = data.results || data;
+                        renderPlaybooks();
+                        updateStats();
+                    } else {
+                        throw new Error('Erreur lors du chargement des playbooks');
+                    }
+                } catch (error) {
+                    console.error('Erreur:', error);
+                    // Fallback sur les données de démonstration si l'API n'est pas disponible
+                    loadDemoData();
+                }
+            }
+
+            // Ajoutez la fonction pour sauvegarder via l'API
+            async function savePlaybookToAPI(playbookData) {
+                try {
+                    const url = '/api/playbooks/';
+                    const method = editingPlaybookId ? 'PUT' : 'POST';
+                    
+                    const response = await fetch(url, {
+                        method: method,
+                        headers: {
+                            'Authorization': 'Bearer ' + accessToken,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(playbookData)
+                    });
+                    
+                    if (response.ok) {
+                        return true;
+                    } else {
+                        throw new Error('Erreur API');
+                    }
+                } catch (error) {
+                    console.error('Erreur:', error);
+                    return false;
+                }
             }
             
             // Fonction pour afficher les playbooks

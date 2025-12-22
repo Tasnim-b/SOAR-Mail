@@ -5,6 +5,8 @@ from django.contrib.auth import get_user_model
 from django.core.validators import EmailValidator
 from django.core.exceptions import ValidationError
 from .models import EmailAccount, EmailMessage, QuarantineEmail
+from rest_framework import serializers
+from .models import Playbook, PlaybookRule, PlaybookAction, IncidentLog
 
 User = get_user_model()
 
@@ -161,3 +163,33 @@ class QuarantineEmailSerializer(serializers.ModelSerializer):
     def get_original_email_id(self, obj):
         """ID de l'email original"""
         return obj.original_email.id
+    
+
+
+
+
+class PlaybookRuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlaybookRule
+        fields = '__all__'
+
+class PlaybookActionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlaybookAction
+        fields = '__all__'
+
+class PlaybookSerializer(serializers.ModelSerializer):
+    rules = PlaybookRuleSerializer(many=True, read_only=True)
+    actions = PlaybookActionSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Playbook
+        fields = '__all__'
+
+class IncidentLogSerializer(serializers.ModelSerializer):
+    email_subject = serializers.CharField(source='email.subject', read_only=True)
+    playbook_name = serializers.CharField(source='playbook.name', read_only=True)
+    
+    class Meta:
+        model = IncidentLog
+        fields = '__all__'

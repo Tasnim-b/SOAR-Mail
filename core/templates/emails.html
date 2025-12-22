@@ -537,6 +537,12 @@
             border-radius: 8px;
             margin-bottom: 25px;
             display: none;
+            animation: slideDown 0.3s ease;
+        }
+        
+        @keyframes slideDown {
+            from { transform: translateY(-10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
         
         .alert-error {
@@ -549,6 +555,12 @@
             background-color: #efe;
             border: 1px solid #cfc;
             color: #0c0;
+        }
+        
+        .alert-info {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
         }
         
         /* No Data */
@@ -1767,9 +1779,7 @@ function escapeHtml(text) {
             function showAlertWithAction(message, type, actionText, actionCallback) {
                 alertMessage.innerHTML = message;
                 alertMessage.className = 'alert alert-' + type;
-                alertMessage.style.display = 'flex';
-                alertMessage.style.justifyContent = 'space-between';
-                alertMessage.style.alignItems = 'center';
+                alertMessage.style.display = 'block';
                 
                 if (actionText && actionCallback) {
                     const actionBtn = document.createElement('button');

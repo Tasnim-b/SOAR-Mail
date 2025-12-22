@@ -36,7 +36,7 @@ urlpatterns = [
     path('api/quarantine/<int:id>/delete/', views.DeleteQuarantineEmailView.as_view(), name='delete-quarantine'),
     path('api/quarantine/bulk-restore/', views.BulkRestoreQuarantineView.as_view(), name='bulk-restore-quarantine'),
     path('api/quarantine/bulk-delete/', views.BulkDeleteQuarantineView.as_view(), name='bulk-delete-quarantine'),
-
+    
     path('statistiques/', views.statistiques_page, name='statistiques_page'),
 
 

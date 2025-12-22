@@ -4,6 +4,7 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.conf import settings
 
 class CustomUserManager(BaseUserManager):
     """Manager personnalisé pour utiliser email au lieu de username"""
@@ -234,122 +235,167 @@ class QuarantineEmail(models.Model):
         super().save(*args, **kwargs)
 
 
-# class Playbook(models.Model):
-#     """Playbook SOAR : ensemble de règles et d'actions"""
-#     name = models.CharField(max_length=100, verbose_name="Nom")
-#     description = models.TextField(blank=True, verbose_name="Description")
-#     is_active = models.BooleanField(default=True, verbose_name="Actif")
-#     priority = models.IntegerField(default=1, verbose_name="Priorité (1=le plus haut)")
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
+# Modèles pour les playbooks SOAR
+class Playbook(models.Model):
+    """Playbook SOAR : ensemble de règles et d'actions"""
+    name = models.CharField(max_length=100, verbose_name="Nom")
+    description = models.TextField(blank=True, verbose_name="Description")
+    is_active = models.BooleanField(default=True, verbose_name="Actif")
+    priority = models.IntegerField(default=1, verbose_name="Priorité (1=le plus haut)")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='playbooks_created')
+    execution_count = models.IntegerField(default=0, verbose_name="Nombre d'exécutions")
+    last_executed = models.DateTimeField(null=True, blank=True, verbose_name="Dernière exécution")
 
-#     def __str__(self):
-#         return f"{self.name} (Priorité: {self.priority})"
+    def __str__(self):
+        return f"{self.name} (Priorité: {self.priority})"
 
-#     class Meta:
-#         verbose_name = "Playbook"
-#         verbose_name_plural = "Playbooks"
-#         ordering = ['priority', 'name']
+    class Meta:
+        verbose_name = "Playbook"
+        verbose_name_plural = "Playbooks"
+        ordering = ['priority', 'name']
 
 
-# class PlaybookRule(models.Model):
-#     """Règle pour déclencher un playbook"""
+class PlaybookRule(models.Model):
+    """Règle pour déclencher un playbook"""
     
-#     FIELD_CHOICES = [
-#         ('sender', 'Expéditeur'),
-#         ('subject', 'Sujet'),
-#         ('body_text', 'Corps texte'),
-#         ('body_html', 'Corps HTML'),
-#         ('threat_level', 'Niveau de menace'),
-#         ('threat_type', 'Type de menace'),
-#         ('risk_score', 'Score de risque'),
-#         ('has_attachments', 'A des pièces jointes'),
-#     ]
+    FIELD_CHOICES = [
+        ('sender', 'Expéditeur'),
+        ('subject', 'Sujet'),
+        ('body_text', 'Corps texte'),
+        ('body_html', 'Corps HTML'),
+        ('threat_level', 'Niveau de menace'),
+        ('threat_type', 'Type de menace'),
+        ('risk_score', 'Score de risque'),
+        ('has_attachments', 'A des pièces jointes'),
+    ]
     
-#     OPERATOR_CHOICES = [
-#         ('contains', 'Contient'),
-#         ('equals', 'Égal à'),
-#         ('startswith', 'Commence par'),
-#         ('endswith', 'Finit par'),
-#         ('regex', 'Expression régulière'),
-#         ('gt', 'Supérieur à'),
-#         ('gte', 'Supérieur ou égal à'),
-#         ('lt', 'Inférieur à'),
-#         ('lte', 'Inférieur ou égal à'),
-#     ]
+    OPERATOR_CHOICES = [
+        ('contains', 'Contient'),
+        ('equals', 'Égal à'),
+        ('startswith', 'Commence par'),
+        ('endswith', 'Finit par'),
+        ('regex', 'Expression régulière'),
+        ('gt', 'Supérieur à'),
+        ('gte', 'Supérieur ou égal à'),
+        ('lt', 'Inférieur à'),
+        ('lte', 'Inférieur ou égal à'),
+    ]
 
-#     playbook = models.ForeignKey(Playbook, on_delete=models.CASCADE, related_name='rules')
-#     field = models.CharField(max_length=50, choices=FIELD_CHOICES, verbose_name="Champ")
-#     operator = models.CharField(max_length=50, choices=OPERATOR_CHOICES, verbose_name="Opérateur")
-#     value = models.TextField(verbose_name="Valeur")
-#     negate = models.BooleanField(default=False, verbose_name="Négation (NOT)")
+    playbook = models.ForeignKey(Playbook, on_delete=models.CASCADE, related_name='rules')
+    field = models.CharField(max_length=50, choices=FIELD_CHOICES, verbose_name="Champ")#Quel champ de l’email analyser
+    operator = models.CharField(max_length=50, choices=OPERATOR_CHOICES, verbose_name="Opérateur")
+    value = models.TextField(verbose_name="Valeur")
+    negate = models.BooleanField(default=False, verbose_name="Négation (NOT)")
+    class Meta:
+        verbose_name = "Règle de playbook"
+        verbose_name_plural = "Règles de playbooks"
+        ordering = ['playbook', 'id']  # Pour maintenir l'ordre
 
-#     class Meta:
-#         verbose_name = "Règle de playbook"
-#         verbose_name_plural = "Règles de playbooks"
+    def evaluate(self, email):
+        """Évalue si la règle correspond à l'email"""
+        email_value = getattr(email, self.field, None)
+        
+        if not email_value:
+            return False
+            
+        if isinstance(email_value, bool):
+            email_value = str(email_value)
+        
+        operator = self.operator
+        rule_value = self.value
+        
+        try:
+            if operator == 'contains':
+                result = rule_value.lower() in str(email_value).lower()
+            elif operator == 'equals':
+                result = str(email_value).lower() == rule_value.lower()
+            elif operator == 'startswith':
+                result = str(email_value).lower().startswith(rule_value.lower())
+            elif operator == 'endswith':
+                result = str(email_value).lower().endswith(rule_value.lower())
+            elif operator == 'regex':
+                import re
+                result = bool(re.search(rule_value, str(email_value), re.IGNORECASE))
+            elif operator == 'gt':
+                result = float(email_value) > float(rule_value)
+            elif operator == 'gte':
+                result = float(email_value) >= float(rule_value)
+            elif operator == 'lt':
+                result = float(email_value) < float(rule_value)
+            elif operator == 'lte':
+                result = float(email_value) <= float(rule_value)
+            else:
+                result = False
+                
+            return not result if self.negate else result
+            
+        except (ValueError, AttributeError):
+            return False
 
-#     def __str__(self):
-#         return f"{self.field} {self.operator} '{self.value[:50]}'"
+    def __str__(self):
+        return f"{self.field} {self.operator} '{self.value[:50]}'"
 
 
-# class PlaybookAction(models.Model):
-#     """Action à exécuter quand un playbook est déclenché"""
+class PlaybookAction(models.Model):
+    """Action à exécuter quand un playbook est déclenché"""
     
-#     ACTION_CHOICES = [
-#         ('quarantine', 'Mettre en quarantaine'),
-#         ('delete', 'Supprimer l\'email'),
-#         ('move_to_folder', 'Déplacer vers dossier'),
-#         ('mark_as_read', 'Marquer comme lu'),
-#         ('mark_as_unread', 'Marquer comme non lu'),
-#         ('forward', 'Transférer à'),
-#         ('reply', 'Répondre avec un modèle'),
-#         ('notify', 'Notifier par email'),
-#         ('log_only', 'Seulement journaliser'),
-#         ('create_ticket', 'Créer un ticket'),
-#         ('block_sender', 'Bloquer l\'expéditeur'),
-#     ]
+    ACTION_CHOICES = [
+        ('quarantine', 'Mettre en quarantaine'),
+        ('delete', 'Supprimer l\'email'),
+        ('move_to_folder', 'Déplacer vers dossier'),
+        ('mark_as_read', 'Marquer comme lu'),
+        ('mark_as_unread', 'Marquer comme non lu'),
+        ('forward', 'Transférer à'),
+        ('reply', 'Répondre avec un modèle'),
+        ('notify', 'Notifier par email'),
+        ('log_only', 'Seulement journaliser'),
+        ('create_ticket', 'Créer un ticket'),
+        ('block_sender', 'Bloquer l\'expéditeur'),
+    ]
 
-#     playbook = models.ForeignKey(Playbook, on_delete=models.CASCADE, related_name='actions')
-#     action_type = models.CharField(max_length=50, choices=ACTION_CHOICES, verbose_name="Type d'action")
-#     parameters = models.JSONField(default=dict, verbose_name="Paramètres")
-#     order = models.IntegerField(default=1, verbose_name="Ordre d'exécution")
-#     delay_seconds = models.IntegerField(default=0, verbose_name="Délai avant exécution (secondes)")
+    playbook = models.ForeignKey(Playbook, on_delete=models.CASCADE, related_name='actions')
+    action_type = models.CharField(max_length=50, choices=ACTION_CHOICES, verbose_name="Type d'action")
+    parameters = models.JSONField(default=dict, verbose_name="Paramètres")
+    order = models.IntegerField(default=1, verbose_name="Ordre d'exécution")
+    delay_seconds = models.IntegerField(default=0, verbose_name="Délai avant exécution (secondes)")
 
-#     class Meta:
-#         verbose_name = "Action de playbook"
-#         verbose_name_plural = "Actions de playbooks"
-#         ordering = ['order']
+    class Meta:
+        verbose_name = "Action de playbook"
+        verbose_name_plural = "Actions de playbooks"
+        ordering = ['order']
 
-#     def __str__(self):
-#         return f"{self.get_action_type_display()} (Ordre: {self.order})"
+    def __str__(self):
+        return f"{self.get_action_type_display()} (Ordre: {self.order})"
 
 
-# class IncidentLog(models.Model):
-#     """Journal des incidents et actions exécutées"""
+class IncidentLog(models.Model):
+    """Journal des incidents et actions exécutées"""
     
-#     STATUS_CHOICES = [
-#         ('detected', 'Détecté'),
-#         ('quarantined', 'Mis en quarantaine'),
-#         ('deleted', 'Supprimé'),
-#         ('resolved', 'Résolu'),
-#         ('false_positive', 'Faux positif'),
-#     ]
+    STATUS_CHOICES = [
+        ('detected', 'Détecté'),
+        ('quarantined', 'Mis en quarantaine'),
+        ('deleted', 'Supprimé'),
+        ('resolved', 'Résolu'),
+        ('false_positive', 'Faux positif'),
+    ]
 
-#     email = models.ForeignKey(EmailMessage, on_delete=models.CASCADE, related_name='incidents')
-#     playbook = models.ForeignKey(Playbook, on_delete=models.SET_NULL, null=True, blank=True, related_name='incidents')
-#     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='detected', verbose_name="Statut")
-#     actions_executed = models.JSONField(default=list, verbose_name="Actions exécutées")
-#     notes = models.TextField(blank=True, verbose_name="Notes")
-#     resolved_at = models.DateTimeField(null=True, blank=True, verbose_name="Résolu à")
-#     resolved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='resolved_incidents')
+    email = models.ForeignKey(EmailMessage, on_delete=models.CASCADE, related_name='incidents')
+    playbook = models.ForeignKey(Playbook, on_delete=models.SET_NULL, null=True, blank=True, related_name='incidents')
+    status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='detected', verbose_name="Statut")
+    actions_executed = models.JSONField(default=list, verbose_name="Actions exécutées")
+    notes = models.TextField(blank=True, verbose_name="Notes")
+    resolved_at = models.DateTimeField(null=True, blank=True, verbose_name="Résolu à")
+    resolved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='resolved_incidents')
     
-#     created_at = models.DateTimeField(auto_now_add=True)
-#     updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-#     class Meta:
-#         verbose_name = "Journal d'incident"
-#         verbose_name_plural = "Journaux d'incidents"
-#         ordering = ['-created_at']
+    class Meta:
+        verbose_name = "Journal d'incident"
+        verbose_name_plural = "Journaux d'incidents"
+        ordering = ['-created_at']
 
-#     def __str__(self):
-#         return f"Incident #{self.id} - {self.email.subject[:50]}"
+    def __str__(self):
+        return f"Incident #{self.id} - {self.email.subject[:50]}"
