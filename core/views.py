@@ -18,7 +18,7 @@ from datetime import timedelta
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import UntypedToken
 from .serializers import CustomTokenObtainPairSerializer,EmailMessageSerializer,QuarantineEmailSerializer
-from .models import EmailAccount, EmailMessage,QuarantineEmail
+from .models import EmailAccount, EmailMessage,QuarantineEmail,IncidentLog
 from rest_framework import generics, filters
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
@@ -125,8 +125,8 @@ class ProtectedDashboardView(APIView):
             threat_level__in=['HIGH', 'CRITICAL']
         ).order_by('-received_date')[:10]
         
-        # Préparer les données pour le graphique
-        threat_types_data = {item['threat_type']: item['count'] for item in threat_distribution}
+        # Préparer les données pour le graphique (normaliser en minuscules pour le front)
+        threat_types_data = {item['threat_type'].lower(): item['count'] for item in threat_distribution}
         
         # Activité des dernières 24h
         hours_data = []
@@ -143,6 +143,7 @@ class ProtectedDashboardView(APIView):
             })
         
         hours_data.reverse()
+        recent_incidents_log = IncidentLog.objects.select_related('email', 'playbook').order_by('-created_at')[:10]
         
         return Response({
             "user": {
@@ -153,7 +154,8 @@ class ProtectedDashboardView(APIView):
                 "emails_analyzed": total_emails,
                 "threats_detected": threats_detected,
                 "incidents_today": incidents_today,
-                "auto_resolved": 0,  # À implémenter avec les playbooks
+                # Comptabilise les incidents marqués 'resolved' sans utilisateur (résolus automatiquement)
+                "auto_resolved": IncidentLog.objects.filter(status='resolved', resolved_by__isnull=True).count(),
             },
             "charts": {
                 "threat_types": threat_types_data,
@@ -172,8 +174,20 @@ class ProtectedDashboardView(APIView):
                 }
                 for incident in recent_incidents
             ],
-            "message": "Dashboard SOAR-Mail"
+            "message": "Dashboard SOAR-Mail",
+            "recent_incidents_log": [
+                {
+                    "id": incident.id,
+                    "email_subject": incident.email.subject[:50] + "..." if len(incident.email.subject) > 50 else incident.email.subject,
+                    "playbook": incident.playbook.name if incident.playbook else "Aucun",
+                    "status": incident.get_status_display(),
+                    "created_at": incident.created_at.strftime('%Y-%m-%d %H:%M'),
+                    "actions_count": len(incident.actions_executed)
+                }
+                for incident in recent_incidents_log
+            ],
         })
+    
 
 
 
@@ -691,3 +705,249 @@ def quarantaine_page(request):
 def statistiques_page(request):
     """Page des statistiques protégée"""
     return render(request, "statistiques.html")
+
+
+from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from django.shortcuts import get_object_or_404
+from django.db.models import Count, Sum
+from .models import Playbook, PlaybookRule, PlaybookAction, IncidentLog, EmailMessage
+from .serializers import PlaybookSerializer, IncidentLogSerializer
+
+# ============ VUES POUR LES PLAYBOOKS ============
+
+class PlaybookListView(generics.ListAPIView):
+    """Liste tous les playbooks"""
+    queryset = Playbook.objects.all().order_by('-created_at')
+    serializer_class = PlaybookSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filtrage par statut
+        status_filter = self.request.query_params.get('status')
+        if status_filter == 'active':
+            queryset = queryset.filter(is_active=True)
+        elif status_filter == 'inactive':
+            queryset = queryset.filter(is_active=False)
+        
+        # Filtrage par priorité
+        priority = self.request.query_params.get('priority')
+        if priority:
+            queryset = queryset.filter(priority=priority)
+        
+        return queryset
+
+class PlaybookCreateView(generics.CreateAPIView):
+    """Crée un nouveau playbook"""
+    serializer_class = PlaybookSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def create(self, request, *args, **kwargs):
+        # Log request data for debugging
+        try:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"Playbook create payload: {request.data}")
+        except:
+            pass
+
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            # Log errors server-side to appear in runserver console
+            try:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Playbook validation failed: {serializer.errors}")
+            except Exception:
+                print("Playbook validation failed:", serializer.errors)
+
+            # Return detailed errors to help frontend debugging
+            return Response({
+                'status': 'error',
+                'message': 'Validation failed',
+                'errors': serializer.errors,
+                'payload': request.data
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Save with created_by set to the requesting user
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+class PlaybookDetailView(generics.RetrieveAPIView):
+    """Détail d'un playbook"""
+    queryset = Playbook.objects.all()
+    serializer_class = PlaybookSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'id'
+
+class PlaybookUpdateView(generics.UpdateAPIView):
+    """Met à jour un playbook"""
+    queryset = Playbook.objects.all()
+    serializer_class = PlaybookSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'id'
+
+class PlaybookDeleteView(generics.DestroyAPIView):
+    """Supprime un playbook"""
+    queryset = Playbook.objects.all()
+    serializer_class = PlaybookSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'id'
+
+class PlaybookToggleActiveView(APIView):
+    """Active/désactive un playbook"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, id):
+        playbook = get_object_or_404(Playbook, id=id)
+        playbook.is_active = not playbook.is_active
+        playbook.save()
+        
+        return Response({
+            'status': 'success',
+            'message': f'Playbook {"activé" if playbook.is_active else "désactivé"}',
+            'is_active': playbook.is_active
+        })
+
+class PlaybookTestView(APIView):
+    """Teste un playbook sur un email spécifique"""
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, id):
+        playbook = get_object_or_404(Playbook, id=id)
+        email_id = request.data.get('email_id')
+        
+        if not email_id:
+            return Response({
+                'error': 'email_id est requis'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            email = EmailMessage.objects.get(id=email_id)
+            
+            # Évaluer les règles
+            from .services.playbook_executor import PlaybookExecutor
+            executor = PlaybookExecutor(email)
+            rules_passed = executor.evaluate_rules(playbook.rules.all())
+            
+            if rules_passed:
+                # Simuler les actions
+                actions = playbook.actions.all().order_by('order')
+                simulated_actions = []
+                
+                for action in actions:
+                    simulated_actions.append({
+                        'action_type': action.action_type,
+                        'action_name': action.get_action_type_display(),
+                        'parameters': action.parameters,
+                        'order': action.order
+                    })
+                
+                return Response({
+                    'status': 'success',
+                    'rules_passed': True,
+                    'message': f'Le playbook se déclencherait pour cet email',
+                    'actions': simulated_actions,
+                    'email': {
+                        'id': email.id,
+                        'subject': email.subject[:50],
+                        'sender': email.sender,
+                        'risk_score': email.risk_score,
+                        'threat_type': email.get_threat_type_display()
+                    }
+                })
+            else:
+                return Response({
+                    'status': 'success',
+                    'rules_passed': False,
+                    'message': 'Les règles du playbook ne correspondent pas à cet email'
+                })
+                
+        except EmailMessage.DoesNotExist:
+            return Response({
+                'status': 'error',
+                'message': 'Email non trouvé'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+class PlaybookStatsView(APIView):
+    """Statistiques des playbooks"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        total_playbooks = Playbook.objects.count()
+        active_playbooks = Playbook.objects.filter(is_active=True).count()
+        total_executions = Playbook.objects.aggregate(total=Sum('execution_count'))['total'] or 0
+        
+        # Menaces bloquées (incidents créés)
+        threats_blocked = IncidentLog.objects.count()
+        
+        return Response({
+            'total_playbooks': total_playbooks,
+            'active_playbooks': active_playbooks,
+            'total_executions': total_executions,
+            'threats_blocked': threats_blocked
+        })
+    
+
+
+
+from .serializers import PlaybookRuleSerializer, PlaybookActionSerializer
+class PlaybookRuleCreateView(generics.CreateAPIView):
+    """Crée une règle pour un playbook"""
+    serializer_class = PlaybookRuleSerializer
+    permission_classes = [IsAuthenticated]
+
+class PlaybookActionCreateView(generics.CreateAPIView):
+    """Crée une action pour un playbook"""
+    serializer_class = PlaybookActionSerializer
+    permission_classes = [IsAuthenticated]
+
+
+
+
+
+
+
+
+
+
+
+
+# ============ VUES POUR LES INCIDENTS ============
+
+class IncidentLogListView(generics.ListAPIView):
+    """Liste des incidents"""
+    serializer_class = IncidentLogSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = IncidentLog.objects.all().order_by('-created_at')
+        
+        # Filtrage par playbook
+        playbook_id = self.request.query_params.get('playbook_id')
+        if playbook_id:
+            queryset = queryset.filter(playbook_id=playbook_id)
+        
+        # Filtrage par statut
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        # Limite
+        limit = self.request.query_params.get('limit', 50)
+        return queryset[:int(limit)]
+
+class IncidentLogDetailView(generics.RetrieveAPIView):
+    """Détail d'un incident"""
+    queryset = IncidentLog.objects.all()
+    serializer_class = IncidentLogSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'id'

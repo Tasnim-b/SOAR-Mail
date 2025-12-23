@@ -7,7 +7,20 @@ from .views import (
     LogoutView,
     ProtectedDashboardView,
     login_page,
-    dashboard_page
+    dashboard_page,
+    PlaybookListView,
+    PlaybookDetailView,
+    PlaybookCreateView,
+    PlaybookUpdateView,
+    PlaybookDeleteView,
+    PlaybookToggleActiveView,
+    PlaybookTestView,
+    PlaybookStatsView,
+    IncidentLogListView,
+    IncidentLogDetailView,
+    PlaybookRuleCreateView,
+    PlaybookActionCreateView,
+
 )
 
 urlpatterns = [
@@ -27,6 +40,22 @@ urlpatterns = [
     path('api/scan/', views.StartScanView.as_view(), name='start_scan'),
 
     path('playbooks/', views.playbooks_page, name='playbooks_page'),
+    # API endpoints for playbooks
+ # API Playbooks
+    path('api/playbooks/', PlaybookListView.as_view(), name='playbook-list'),
+    path('api/playbooks/create/', PlaybookCreateView.as_view(), name='playbook-create'),
+    path('api/playbooks/<int:id>/', PlaybookDetailView.as_view(), name='playbook-detail'),
+    path('api/playbooks/<int:id>/update/', PlaybookUpdateView.as_view(), name='playbook-update'),
+    path('api/playbooks/<int:id>/delete/', PlaybookDeleteView.as_view(), name='playbook-delete'),
+    path('api/playbooks/<int:id>/toggle-active/', PlaybookToggleActiveView.as_view(), name='playbook-toggle-active'),
+    path('api/playbooks/<int:id>/test/', PlaybookTestView.as_view(), name='playbook-test'),
+    path('api/playbooks/stats/', PlaybookStatsView.as_view(), name='playbook-stats'),
+    path('api/playbooks/rules/create/', PlaybookRuleCreateView.as_view(), name='playbook-rule-create'),
+    path('api/playbooks/actions/create/', PlaybookActionCreateView.as_view(), name='playbook-action-create'),
+
+    # API Incidents
+    path('api/incidents/', IncidentLogListView.as_view(), name='incident-list'),
+    path('api/incidents/<int:id>/', IncidentLogDetailView.as_view(), name='incident-detail'),
 
     path('quarantaine/', views.quarantaine_page, name='quarantaine_page'),
         # Quarantaine

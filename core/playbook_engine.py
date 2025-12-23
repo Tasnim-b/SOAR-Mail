@@ -75,6 +75,8 @@ class PlaybookEngine:
                 return self._log_only(email, playbook=None)
             elif action_type == 'block_sender':
                 return self._block_sender(email, params)
+            elif action_type == 'notify':
+                return self._notify_admin(email, params)
             else:
                 return False, f"Action non implémentée: {action_type}"
                 
@@ -151,9 +153,24 @@ class PlaybookEngine:
         except Exception as e:
             return False, f"Erreur: {str(e)}"
     
-    def _log_only(self, email, playbook):
+    def _log_only(self, email, params):
         """Seulement journaliser"""
-        return True, "Incident journalisé"
+        try:
+            # Créer un incident log sans action supplémentaire
+            IncidentLog.objects.create(
+                email=email,
+                status='detected',
+                actions_executed=[{
+                    'action': 'log_only',
+                    'success': True,
+                    'message': 'Incident journalisé uniquement',
+                    'executed_at': timezone.now().isoformat()
+                }],
+                notes=params.get('reason', 'Journalisation par playbook')
+            )
+            return True, "Incident journalisé avec succès"
+        except Exception as e:
+            return False, f"Erreur: {str(e)}"
     
     def run_all_playbooks_for_email(self, email, user=None):
         """Exécute tous les playbooks actifs pour un email"""
@@ -169,3 +186,31 @@ class PlaybookEngine:
         except Exception as e:
             print(f"Erreur lors de l'exécution des playbooks: {e}")
             return False
+        
+    def _notify_admin(self, email, params):
+        """Notifie l'admin via l'interface (pas d'email)"""
+        try:
+            # Créer une entrée de notification dans la base
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            admin = User.objects.filter(is_superuser=True).first()
+            
+            if admin:
+                # Vous pourriez créer un modèle Notification, mais pour simplifier,
+                # nous allons créer un IncidentLog spécial
+                IncidentLog.objects.create(
+                    email=email,
+                    status='notified',
+                    actions_executed=[{
+                        'action': 'notify',
+                        'success': True,
+                        'message': f'Admin notifié: {email.subject[:50]}...',
+                        'executed_at': timezone.now().isoformat()
+                    }],
+                    notes=f"Notification envoyée à l'admin: {email.sender} - {email.subject}"
+                )
+                return True, f"Admin notifié pour email: {email.subject[:30]}..."
+            else:
+                return False, "Aucun admin trouvé"
+        except Exception as e:
+            return False, f"Erreur: {str(e)}"

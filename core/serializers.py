@@ -178,14 +178,74 @@ class PlaybookActionSerializer(serializers.ModelSerializer):
         model = PlaybookAction
         fields = '__all__'
 
+
 class PlaybookSerializer(serializers.ModelSerializer):
     rules = PlaybookRuleSerializer(many=True, read_only=True)
-    actions = PlaybookActionSerializer(many=True, read_only=True)
+    # Exposer `actions` comme liste simple d'identifiants (ex: 'quarantine', 'move_to_folder')
+    actions = serializers.SerializerMethodField()
+    # Exposer `conditions` attendues par le frontend (ex: 'phishing','malware','spam','attachment','high_risk')
+    conditions = serializers.SerializerMethodField()
+    # Champ `status` pour compatibilité avec le front ('active'|'inactive')
+    status = serializers.SerializerMethodField()
+    created_by_email = serializers.EmailField(source='created_by.email', read_only=True)
     
     class Meta:
         model = Playbook
-        fields = '__all__'
+        fields = [
+            'id', 'name', 'description', 'is_active', 'status', 'priority',
+            'created_at', 'updated_at', 'created_by', 'created_by_email',
+            'execution_count', 'last_executed', 'rules', 'actions', 'conditions'
+        ]
+        read_only_fields = ['created_at', 'updated_at', 'created_by', 'execution_count', 'last_executed']
+    
+    def create(self, validated_data):
+        validated_data['created_by'] = self.context['request'].user
+        return super().create(validated_data)
 
+    def validate_priority(self, value):
+        """Accepter les chaînes vides ou les chaînes numériques et retourner un int par défaut."""
+        if value is None or value == '':
+            return 1
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            raise serializers.ValidationError('Priority must be an integer')
+
+    def get_actions(self, obj):
+        return [a.action_type for a in obj.actions.all().order_by('order')]
+
+    def get_status(self, obj):
+        return 'active' if obj.is_active else 'inactive'
+
+    def get_conditions(self, obj):
+        conds = set()
+        for r in obj.rules.all():
+            field = (r.field or '').lower()
+            value = (r.value or '').upper()
+
+            if field == 'threat_type':
+                for v in value.split(','):
+                    v = v.strip()
+                    if v == 'PHISHING':
+                        conds.add('phishing')
+                    elif v == 'MALWARE':
+                        conds.add('malware')
+                    elif v == 'SPAM':
+                        conds.add('spam')
+            elif field == 'threat_level':
+                if 'HIGH' in value or 'CRITICAL' in value:
+                    conds.add('high_risk')
+                elif 'MEDIUM' in value:
+                    conds.add('suspicious')
+            elif field == 'has_attachments':
+                if value in ['TRUE', '1', 'YES']:
+                    conds.add('attachment')
+            elif field in ['subject', 'body_text', 'body_html']:
+                # rules on subject/body are too generic; skip mapping
+                continue
+
+        return list(conds)
+    
 class IncidentLogSerializer(serializers.ModelSerializer):
     email_subject = serializers.CharField(source='email.subject', read_only=True)
     playbook_name = serializers.CharField(source='playbook.name', read_only=True)

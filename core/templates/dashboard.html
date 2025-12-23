@@ -778,9 +778,9 @@
                         labels: ['Phishing', 'Spam', 'Malware'],
                         datasets: [{
                             data: [
-                                chartData.threat_types.phishing || 0,
-                                chartData.threat_types.spam || 0,
-                                chartData.threat_types.malware || 0
+                                chartData.threat_types?.phishing || 0,
+                                chartData.threat_types?.spam || 0,
+                                chartData.threat_types?.malware || 0
                             ],
                             backgroundColor: [
                                 '#f72585',

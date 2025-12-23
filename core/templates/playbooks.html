@@ -1353,30 +1353,35 @@
             }
 
             // Ajoutez la fonction pour sauvegarder via l'API
-            async function savePlaybookToAPI(playbookData) {
-                try {
-                    const url = '/api/playbooks/';
-                    const method = editingPlaybookId ? 'PUT' : 'POST';
-                    
-                    const response = await fetch(url, {
-                        method: method,
-                        headers: {
-                            'Authorization': 'Bearer ' + accessToken,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(playbookData)
-                    });
-                    
-                    if (response.ok) {
-                        return true;
-                    } else {
-                        throw new Error('Erreur API');
+                async function savePlaybookToAPI(playbookData) {
+                    try {
+                        let url;
+                        let method;
+
+                        if (editingPlaybookId) {
+                            url = `/api/playbooks/${editingPlaybookId}/update/`;
+                            method = 'PUT';
+                        } else {
+                            url = '/api/playbooks/create/';
+                            method = 'POST';
+                        }
+
+                        const response = await fetch(url, {
+                            method: method,
+                            headers: {
+                                'Authorization': 'Bearer ' + accessToken,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(playbookData)
+                        });
+
+                        return response.ok;
+                    } catch (error) {
+                        console.error('Erreur API:', error);
+                        return false;
                     }
-                } catch (error) {
-                    console.error('Erreur:', error);
-                    return false;
                 }
-            }
+
             
             // Fonction pour afficher les playbooks
             function renderPlaybooks() {
@@ -1516,93 +1521,201 @@
             }
             
             // Fonction pour sauvegarder un playbook
-            function savePlaybook() {
-                const name = document.getElementById('playbookName').value;
-                const description = document.getElementById('playbookDescription').value;
-                const status = document.getElementById('playbookStatus').value;
-                const priority = document.getElementById('playbookPriority').value;
-                
-                // Récupérer les conditions
-                const conditions = [];
-                document.querySelectorAll('#playbookModal input[id^="condition"]:checked').forEach(checkbox => {
-                    conditions.push(checkbox.value);
-                });
-                
-                // Récupérer les actions
-                const actions = [];
-                document.querySelectorAll('#playbookModal input[id^="action"]:checked').forEach(checkbox => {
-                    actions.push(checkbox.value);
-                });
-                
-                // Validation
-                if (!name) {
-                    showAlert('Le nom du playbook est requis', 'error');
-                    return;
-                }
-                
-                if (conditions.length === 0) {
-                    showAlert('Au moins une condition doit être sélectionnée', 'error');
-                    return;
-                }
-                
-                if (actions.length === 0) {
-                    showAlert('Au moins une action doit être sélectionnée', 'error');
-                    return;
-                }
-                
-                if (editingPlaybookId) {
-                    // Mettre à jour un playbook existant
-                    const index = playbooks.findIndex(p => p.id === editingPlaybookId);
-                    if (index !== -1) {
-                        playbooks[index] = {
-                            ...playbooks[index],
-                            name,
-                            description,
-                            conditions,
-                            actions,
-                            status,
-                            priority,
-                            updated: new Date().toISOString().split('T')[0]
-                        };
-                    }
-                } else {
-                    // Créer un nouveau playbook
-                    const newId = playbooks.length > 0 ? Math.max(...playbooks.map(p => p.id)) + 1 : 1;
-                    playbooks.push({
-                        id: newId,
-                        name,
-                        description,
-                        conditions,
-                        actions,
-                        status,
-                        priority,
-                        executions: 0,
-                        threats_blocked: 0,
-                        created: new Date().toISOString().split('T')[0],
-                        updated: new Date().toISOString().split('T')[0]
-                    });
-                }
-                
-                // Re-render et fermer la modal
-                renderPlaybooks();
-                updateStats();
-                closePlaybookModal();
-                
-                showAlert(`Playbook ${editingPlaybookId ? 'modifié' : 'créé'} avec succès!`, 'success');
-                editingPlaybookId = null;
+// Fonction pour sauvegarder un playbook
+async function savePlaybook() {
+    const name = document.getElementById('playbookName').value;
+    const description = document.getElementById('playbookDescription').value;
+    const status = document.getElementById('playbookStatus').value;
+    const prioritySTR = document.getElementById('playbookPriority').value;
+        // Convertir la priorité texte en entier
+    const priorityMap = {
+        'low': 1,
+        'medium': 2,
+        'high': 3,
+        'critical': 4
+    };
+    const priorityValue = priorityMap[prioritySTR] || 2; // Par défaut moyenne
+    
+    // Récupérer les conditions
+    const conditions = [];
+    document.querySelectorAll('#playbookModal input[id^="condition"]:checked').forEach(checkbox => {
+        conditions.push(checkbox.value);
+    });
+    
+    // Récupérer les actions
+    const actions = [];
+        const actionMap = {
+        'quarantine': 'quarantine',
+        'mark_read': 'mark_as_read',
+        'log': 'log_only',
+        'alert': 'notify',
+        'block_sender': 'block_sender',
+        'add_blacklist': 'block_sender',
+        'forward': 'forward',
+        'delete': 'delete'
+    };
+    document.querySelectorAll('#playbookModal input[id^="action"]:checked').forEach(checkbox => {
+        const frontendAction = checkbox.value;
+        const backendAction = actionMap[frontendAction] || frontendAction;
+        actions.push(backendAction);
+    });
+    
+    // Validation
+    if (!name) {
+        showAlert('Le nom du playbook est requis', 'error');
+        return;
+    }
+    
+    if (conditions.length === 0) {
+        showAlert('Au moins une condition doit être sélectionnée', 'error');
+        return;
+    }
+    
+    if (actions.length === 0) {
+        showAlert('Au moins une action doit être sélectionnée', 'error');
+        return;
+    }
+    
+    // Préparer les données pour l'API
+    const playbookData = {
+        name: name,
+        description: description,
+        is_active: status === 'active',
+        priority: priorityValue,
+        conditions: conditions,
+        actions: actions
+    };
+    
+    console.log("Données à envoyer:", playbookData);
+    
+    try {
+        let url, method;
+        
+        if (editingPlaybookId) {
+            url = `/api/playbooks/${editingPlaybookId}/update/`;
+            method = 'PUT';
+        } else {
+            url = '/api/playbooks/create/';
+            method = 'POST';
+        }
+        
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Authorization': 'Bearer ' + accessToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(playbookData)
+        });
+        
+        console.log("Réponse API:", response.status);
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log("Playbook sauvegardé:", data);
+             const playbookId = data.id;
+                //  Créer les règles
+            for (let condition of conditions) {
+                await createPlaybookRule(playbookId, condition);
             }
+
+            //  Créer les actions
+            let order = 1;
+            for (let action of actions) {
+                await createPlaybookAction(playbookId, action, order++);
+    }
             
-            // Fonction pour mettre à jour les statistiques
-            function updateStats() {
-                const totalPlaybooks = playbooks.length;
-                const activePlaybooks = playbooks.filter(p => p.status === 'active').length;
-                const totalExecutions = playbooks.reduce((sum, p) => sum + p.executions, 0);
-                const threatsBlocked = playbooks.reduce((sum, p) => sum + p.threats_blocked, 0);
-                
-                document.getElementById('totalPlaybooks').textContent = totalPlaybooks;
-                document.getElementById('activePlaybooks').textContent = activePlaybooks;
-                document.getElementById('totalExecutions').textContent = totalExecutions;
-                document.getElementById('threatsBlocked').textContent = threatsBlocked;
+            showAlert(`Playbook ${editingPlaybookId ? 'modifié' : 'créé'} avec succès!`, 'success');
+            closePlaybookModal();
+            
+            // Recharger la liste depuis l'API
+            loadPlaybooks();
+        } else {
+            const errorText = await response.text();
+            console.error('Erreur API:', errorText);
+            
+            try {
+                const errorData = JSON.parse(errorText);
+                showAlert(`Erreur: ${errorData.detail || errorData.message || errorText}`, 'error');
+            } catch {
+                showAlert(`Erreur HTTP ${response.status}: ${errorText}`, 'error');
+            }
+        }
+    } catch (error) {
+        console.error('Erreur réseau:', error);
+        showAlert('Erreur de connexion au serveur', 'error');
+    }
+    
+    editingPlaybookId = null;
+}
+
+// Fonctions auxiliaires pour créer règles et actions
+async function createPlaybookRule(playbookId, condition) {
+    // Mapper les conditions du frontend aux règles du backend
+    const ruleMap = {
+        'phishing': { field: 'threat_type', operator: 'in', value: 'PHISHING' },
+        'malware': { field: 'threat_type', operator: 'in', value: 'MALWARE' },
+        'spam': { field: 'threat_type', operator: 'in', value: 'SPAM' },
+        'high_risk': { field: 'risk_score', operator: 'gte', value: '80' },
+        'suspicious': { field: 'risk_score', operator: 'gte', value: '40' },
+        'attachment': { field: 'has_attachments', operator: 'equals', value: 'true' }
+    };
+    
+    const rule = ruleMap[condition];
+    if (!rule) return;
+    
+    try {
+        await fetch(`/api/playbooks/${playbookId}/rules/create/`, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + accessToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(rule)
+        });
+    } catch (error) {
+        console.error('Erreur création règle:', error);
+    }
+}
+
+ async function createPlaybookAction(playbookId, actionType, order) {
+    try {
+        await fetch(`/api/playbooks/${playbookId}/actions/create/`, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + accessToken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                action_type: actionType,
+                order: order,
+                parameters: {}
+            })
+        });
+    } catch (error) {
+        console.error('Erreur création action:', error);
+    }
+} 
+            
+            // 5. Pour mettre à jour les statistiques 
+            async function updateStats() {
+                try {
+                    const response = await fetch('/api/playbooks/stats/', {
+                        headers: {
+                            'Authorization': 'Bearer ' + accessToken
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        document.getElementById('totalPlaybooks').textContent = data.total_playbooks || 0;
+                        document.getElementById('activePlaybooks').textContent = data.active_playbooks || 0;
+                        document.getElementById('totalExecutions').textContent = data.total_executions || 0;
+                        document.getElementById('threatsBlocked').textContent = data.threats_blocked || 0;
+                    }
+                } catch (error) {
+                    console.error('Erreur stats:', error);
+                }
             }
             
             // Fonction pour gérer la déconnexion
@@ -1648,14 +1761,24 @@
             }
             
             // Fonctions globales
-            window.togglePlaybook = function(id) {
-                const playbook = playbooks.find(p => p.id === id);
-                if (playbook) {
-                    playbook.status = playbook.status === 'active' ? 'inactive' : 'active';
-                    playbook.updated = new Date().toISOString().split('T')[0];
-                    renderPlaybooks();
-                    updateStats();
-                    showAlert(`Playbook "${playbook.name}" ${playbook.status === 'active' ? 'activé' : 'désactivé'}`, 'success');
+            window.togglePlaybook = async function(id) {
+                try {
+                    const response = await fetch(`/api/playbooks/${id}/toggle-active/`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + accessToken,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        showAlert(`Playbook ${data.is_active ? 'activé' : 'désactivé'}`, 'success');
+                        loadPlaybooks(); // Recharger la liste
+                    }
+                } catch (error) {
+                    console.error('Erreur:', error);
+                    showAlert('Erreur lors de la modification', 'error');
                 }
             };
             
@@ -1666,13 +1789,26 @@
                 }
             };
             
-            window.deletePlaybook = function(id) {
+            // 4. Pour supprimer un playbook
+            window.deletePlaybook = async function(id) {
                 const playbook = playbooks.find(p => p.id === id);
-                if (playbook && confirm(`Êtes-vous sûr de vouloir supprimer le playbook "${playbook.name}" ? Cette action est irréversible.`)) {
-                    playbooks = playbooks.filter(p => p.id !== id);
-                    renderPlaybooks();
-                    updateStats();
-                    showAlert('Playbook supprimé', 'success');
+                if (playbook && confirm(`Êtes-vous sûr de vouloir supprimer le playbook "${playbook.name}" ?`)) {
+                    try {
+                        const response = await fetch(`/api/playbooks/${id}/delete/`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Authorization': 'Bearer ' + accessToken
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            showAlert('Playbook supprimé', 'success');
+                            loadPlaybooks(); // Recharger
+                        }
+                    } catch (error) {
+                        console.error('Erreur:', error);
+                        showAlert('Erreur lors de la suppression', 'error');
+                    }
                 }
             };
             

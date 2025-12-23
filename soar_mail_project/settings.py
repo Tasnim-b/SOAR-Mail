@@ -16,7 +16,7 @@ DEBUG = True
 ALLOWED_HOSTS = []
 
 
-# Application definition
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -149,4 +149,24 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),  # Authorization: Bearer <token>
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
+}
+
+# Celery Configuration
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+
+# Beat Schedule
+CELERY_BEAT_SCHEDULE = {
+    'fetch-and-analyze-emails-every-10-minutes': {
+        'task': 'core.tasks.fetch_and_analyze_emails',
+        'schedule': 600.0,  # Toutes les 10 minutes
+    },
+    'execute-pending-actions-every-5-minutes': {
+        'task': 'core.tasks.execute_pending_actions',
+        'schedule': 300.0,  # Toutes les 5 minutes
+    },
 }

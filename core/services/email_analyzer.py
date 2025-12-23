@@ -60,6 +60,16 @@ class EmailAnalyzer:
         # 4. Vérifier les pièces jointes
         attachments = email_data.get('attachments', [])
         risk_score += self._analyze_attachments(attachments)
+
+        # Détecter explicitement les pièces jointes dangereuses comme MALWARE
+        try:
+            for attachment in attachments:
+                filename = attachment.get('filename', '').lower()
+                if any(filename.endswith(ext) for ext in self.dangerous_extensions):
+                    threats_detected.append('MALWARE')
+                    break
+        except Exception:
+            pass
         
         # 5. Vérifier les URLs
         urls = self._extract_urls(body_text + body_html)
@@ -188,7 +198,10 @@ class EmailAnalyzer:
         
         # Déterminer le type de menace principal
         threat_type = 'NONE'
-        if risk_score > 50:
+        # Prioriser les menaces explicitement détectées (ex: MALWARE via pièces jointes)
+        if 'MALWARE' in threats_detected:
+            threat_type = 'MALWARE'
+        elif risk_score > 50:
             threat_type = 'PHISHING'
         elif risk_score > 30:
             threat_type = 'SPAM'
@@ -208,3 +221,4 @@ class EmailAnalyzer:
             threat_level = 'SAFE'
         
         return threat_level, threat_type
+    
