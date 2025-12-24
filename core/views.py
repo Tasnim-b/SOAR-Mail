@@ -156,6 +156,7 @@ class ProtectedDashboardView(APIView):
                 "incidents_today": incidents_today,
                 # Comptabilise les incidents marqués 'resolved' sans utilisateur (résolus automatiquement)
                 "auto_resolved": IncidentLog.objects.filter(status='resolved', resolved_by__isnull=True).count(),
+
             },
             "charts": {
                 "threat_types": threat_types_data,
@@ -905,10 +906,22 @@ class PlaybookRuleCreateView(generics.CreateAPIView):
     serializer_class = PlaybookRuleSerializer
     permission_classes = [IsAuthenticated]
 
+    def perform_create(self, serializer):
+        playbook_id = self.kwargs.get('playbook_id')
+        playbook = get_object_or_404(Playbook, id=playbook_id)
+        serializer.save(playbook=playbook)
+
 class PlaybookActionCreateView(generics.CreateAPIView):
     """Crée une action pour un playbook"""
     serializer_class = PlaybookActionSerializer
     permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        playbook_id = self.kwargs.get('playbook_id')
+        playbook = get_object_or_404(Playbook, id=playbook_id)
+        serializer.save(playbook=playbook)
+
+
 
 
 
@@ -951,3 +964,555 @@ class IncidentLogDetailView(generics.RetrieveAPIView):
     serializer_class = IncidentLogSerializer
     permission_classes = [IsAuthenticated]
     lookup_field = 'id'
+
+
+#statistiques page
+# ============ VUES POUR LES STATISTIQUES ============
+
+from django.db.models import Count, Avg, Q, F, Sum, Case, When
+from django.db.models.functions import TruncDate, TruncWeek, TruncMonth
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
+from django.db.models import Max, Count
+from django.db.models.expressions import ExpressionWrapper
+from django.db import models
+class StatsKPIsView(APIView):
+    """KPIs principaux pour le tableau de bord"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        # Calculer la période (par défaut 7 jours)
+        days = int(request.query_params.get('days', 7))
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+        
+        # Période précédente pour les tendances (même durée)
+        previous_start_date = start_date - timedelta(days=days)
+        previous_end_date = start_date
+        
+        # 1. Emails analysés (TOUS les emails de la période)
+        total_emails_current = EmailMessage.objects.filter(
+            received_date__range=[start_date, end_date]
+        ).count()
+        
+        # 2. Emails analysés (période précédente)
+        total_emails_previous = EmailMessage.objects.filter(
+            received_date__range=[previous_start_date, previous_end_date]
+        ).count()
+        
+        # 3. Menaces détectées (cohérent avec le dashboard : threat_level != 'SAFE')
+        threats_current = EmailMessage.objects.filter(
+            received_date__range=[start_date, end_date],
+            analyzed=True
+        ).exclude(threat_level='SAFE').count()
+        
+        # 4. Menaces détectées (période précédente)
+        threats_previous = EmailMessage.objects.filter(
+            received_date__range=[previous_start_date, previous_end_date],
+            analyzed=True
+        ).exclude(threat_level='SAFE').count()
+        
+        # 5. Taux de détection (par rapport aux emails analysés seulement)
+        analyzed_emails_current = EmailMessage.objects.filter(
+            received_date__range=[start_date, end_date],
+            analyzed=True
+        ).count()
+        
+        if analyzed_emails_current > 0:
+            detection_rate_current = (threats_current / analyzed_emails_current) * 100
+        else:
+            detection_rate_current = 0
+            
+        analyzed_emails_previous = EmailMessage.objects.filter(
+            received_date__range=[previous_start_date, previous_end_date],
+            analyzed=True
+        ).count()
+        
+        if analyzed_emails_previous > 0:
+            detection_rate_previous = (threats_previous / analyzed_emails_previous) * 100
+        else:
+            detection_rate_previous = 0
+        
+        # 6. Temps moyen de réponse (seulement pour les emails analysés)
+        # Filtrer seulement les emails avec analysis_date non nul et dans la période
+        response_times = EmailMessage.objects.filter(
+            received_date__range=[start_date, end_date],
+            analyzed=True,
+            analysis_date__isnull=False,
+            analysis_date__gte=F('received_date')  # S'assurer que l'analyse est après réception
+        ).annotate(
+            response_time=ExpressionWrapper(
+                F('analysis_date') - F('received_date'),
+                output_field=models.DurationField()
+            )
+        ).filter(
+            response_time__gte=timedelta(0)  # Temps positif seulement
+        ).aggregate(
+            avg_response=Avg('response_time')
+        )
+        
+        # Convertir en secondes (max 1 heure pour éviter les valeurs aberrantes)
+        if response_times['avg_response']:
+            avg_response_seconds = min(response_times['avg_response'].total_seconds(), 3600)
+        else:
+            avg_response_seconds = 0
+        
+        # Récupérer la valeur précédente pour le temps de réponse
+        response_times_previous = EmailMessage.objects.filter(
+            received_date__range=[previous_start_date, previous_end_date],
+            analyzed=True,
+            analysis_date__isnull=False,
+            analysis_date__gte=F('received_date')
+        ).annotate(
+            response_time=ExpressionWrapper(
+                F('analysis_date') - F('received_date'),
+                output_field=models.DurationField()
+            )
+        ).filter(
+            response_time__gte=timedelta(0)
+        ).aggregate(
+            avg_response=Avg('response_time')
+        )
+        
+        if response_times_previous['avg_response']:
+            avg_response_seconds_previous = min(response_times_previous['avg_response'].total_seconds(), 3600)
+        else:
+            avg_response_seconds_previous = 0
+        
+        # Calcul des tendances (éviter la division par zéro)
+        def calculate_trend(current, previous):
+            if previous == 0:
+                if current == 0:
+                    return 0
+                else:
+                    return 100.0  # De 0 à X -> +100%
+            return round(((current - previous) / previous) * 100, 1)
+        
+        # Pour le temps de réponse, une diminution est positive
+        response_trend = 0
+        if avg_response_seconds_previous > 0 and avg_response_seconds > 0:
+            response_trend = -round(((avg_response_seconds - avg_response_seconds_previous) / avg_response_seconds_previous) * 100, 1)
+        
+        return Response({
+            'current_period': {
+                'total_emails': total_emails_current,
+                'threats_detected': threats_current,
+                'detection_rate': round(detection_rate_current, 1),
+                'avg_response_time': round(avg_response_seconds, 1)
+            },
+            'previous_period': {
+                'total_emails': total_emails_previous,
+                'threats_detected': threats_previous,
+                'detection_rate': round(detection_rate_previous, 1),
+                'avg_response_time': round(avg_response_seconds_previous, 1)
+            },
+            'trends': {
+                'total_emails': calculate_trend(total_emails_current, total_emails_previous),
+                'threats_detected': calculate_trend(threats_current, threats_previous),
+                'detection_rate': calculate_trend(detection_rate_current, detection_rate_previous),
+                'avg_response_time': response_trend
+            },
+            'period': {
+                'days': days,
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat()
+            }
+        })
+class StatsThreatDistributionView(APIView):
+    """Répartition des types de menaces"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        days = int(request.query_params.get('days', 7))
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+        
+        # Compter les menaces par type
+        threat_distribution = EmailMessage.objects.filter(
+            received_date__range=[start_date, end_date],
+            threat_type__in=['PHISHING', 'MALWARE', 'SPAM', 'SUSPICIOUS', 'SPOOFING']
+        ).values('threat_type').annotate(
+            count=Count('id')
+        ).order_by('-count')
+        
+        # Compter les emails sûrs
+        safe_count = EmailMessage.objects.filter(
+            received_date__range=[start_date, end_date],
+            threat_type='NONE',
+            threat_level='SAFE'
+        ).count()
+        
+        # Formater les données pour Chart.js
+        labels = []
+        data = []
+        background_colors = [
+            'rgba(248, 150, 30, 0.8)',  # Phishing - orange
+            'rgba(247, 37, 133, 0.8)',   # Malware - rose
+            'rgba(108, 117, 125, 0.8)',  # Spam - gris
+            'rgba(76, 201, 240, 0.8)',   # Suspect - bleu clair
+            'rgba(114, 9, 183, 0.8)',    # Spoofing - violet
+            'rgba(40, 167, 69, 0.8)'     # Safe - vert
+        ]
+        
+        threat_names = {
+            'PHISHING': 'Phishing',
+            'MALWARE': 'Malware',
+            'SPAM': 'Spam',
+            'SUSPICIOUS': 'Suspect',
+            'SPOOFING': 'Usurpation',
+            'SAFE': 'Sûr'
+        }
+        
+        # Ajouter les menaces
+        total_threats = 0
+        for item in threat_distribution:
+            labels.append(threat_names.get(item['threat_type'], item['threat_type']))
+            data.append(item['count'])
+            total_threats += item['count']
+        
+        # Ajouter les emails sûrs
+        if safe_count > 0:
+            labels.append('Sûrs')
+            data.append(safe_count)
+        
+        # Calculer les pourcentages
+        total_emails = sum(data)
+        percentages = [round((count / total_emails) * 100, 1) if total_emails > 0 else 0 for count in data]
+        
+        return Response({
+            'labels': labels,
+            'data': data,
+            'percentages': percentages,
+            'background_colors': background_colors[:len(labels)],
+            'total_threats': total_threats,
+            'total_emails': total_emails
+        })
+
+class StatsEmailTimelineView(APIView):
+    """Évolution des emails dans le temps"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        days = int(request.query_params.get('days', 7))
+        view_type = request.query_params.get('view', 'daily')
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+        
+        # Déterminer la fonction de truncation
+        if view_type == 'weekly':
+            trunc_func = TruncWeek('received_date')
+        elif view_type == 'monthly':
+            trunc_func = TruncMonth('received_date')
+        else:  # daily
+            trunc_func = TruncDate('received_date')
+        
+        # Récupérer les données par période
+        timeline_data = EmailMessage.objects.filter(
+            received_date__range=[start_date, end_date]
+        ).annotate(
+            period=trunc_func
+        ).values('period').annotate(
+            total=Count('id'),
+            safe=Count(Case(When(threat_type='NONE', threat_level='SAFE', then=1))),
+            suspicious=Count(Case(When(threat_type='SUSPICIOUS', then=1))),
+            malicious=Count(Case(
+                When(threat_type__in=['PHISHING', 'MALWARE', 'SPAM', 'SPOOFING'], then=1)
+            ))
+        ).order_by('period')
+        
+        # Formater les données
+        labels = []
+        safe_data = []
+        suspicious_data = []
+        malicious_data = []
+        
+        for item in timeline_data:
+            if item['period']:
+                if view_type == 'daily':
+                    labels.append(item['period'].strftime('%a'))
+                elif view_type == 'weekly':
+                    labels.append(f'S{item["period"].isocalendar()[1]}')
+                else:  # monthly
+                    labels.append(item['period'].strftime('%b'))
+                
+                safe_data.append(item['safe'])
+                suspicious_data.append(item['suspicious'])
+                malicious_data.append(item['malicious'])
+        
+        return Response({
+            'labels': labels,
+            'datasets': [
+                {
+                    'label': 'Sûrs',
+                    'data': safe_data,
+                    'backgroundColor': 'rgba(40, 167, 69, 0.5)',
+                    'borderColor': 'rgba(40, 167, 69, 1)'
+                },
+                {
+                    'label': 'Suspects',
+                    'data': suspicious_data,
+                    'backgroundColor': 'rgba(76, 201, 240, 0.5)',
+                    'borderColor': 'rgba(76, 201, 240, 1)'
+                },
+                {
+                    'label': 'Malveillants',
+                    'data': malicious_data,
+                    'backgroundColor': 'rgba(247, 37, 133, 0.5)',
+                    'borderColor': 'rgba(247, 37, 133, 1)'
+                }
+            ]
+        })
+
+from django.db.models import Count, Max, F
+from django.db.models.functions import Concat
+from django.db import models
+
+class StatsThreatSourcesView(APIView):
+    """Top des sources de menaces"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        days = int(request.query_params.get('days', 30))
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+        limit = int(request.query_params.get('limit', 10))
+        
+        # Pour SQLite, on utilise une approche différente
+        # D'abord, on récupère les sources avec leur compte
+        threat_sources = EmailMessage.objects.filter(
+            received_date__range=[start_date, end_date],
+            threat_type__in=['PHISHING', 'MALWARE', 'SPAM', 'SUSPICIOUS', 'SPOOFING']
+        ).values('sender', 'sender_name').annotate(
+            count=Count('id'),
+            last_seen=Max('received_date'),
+        ).order_by('-count')[:limit]
+        
+        # Ensuite, pour chaque source, on récupère les types de menaces uniques
+        sources = []
+        for source in threat_sources:
+            # Récupérer les types de menaces distincts pour cette source
+            threat_types_qs = EmailMessage.objects.filter(
+                sender=source['sender'],
+                received_date__range=[start_date, end_date]
+            ).values_list('threat_type', flat=True).distinct()
+            
+            # Convertir en liste
+            threat_types = list(threat_types_qs)
+            
+            # Déterminer le type de menace principal (le plus fréquent)
+            if threat_types:
+                # Compter les occurrences de chaque type
+                type_counts = {}
+                for t_type in threat_types_qs:
+                    type_counts[t_type] = type_counts.get(t_type, 0) + 1
+                
+                # Prendre le type le plus fréquent
+                main_threat = max(type_counts, key=type_counts.get)
+            else:
+                main_threat = 'SUSPICIOUS'
+            
+            sources.append({
+                'sender': source['sender'],
+                'sender_name': source['sender_name'] or source['sender'].split('@')[0],
+                'domain': source['sender'].split('@')[-1] if '@' in source['sender'] else source['sender'],
+                'threat_type': main_threat,
+                'count': source['count'],
+                'last_seen': source['last_seen'].strftime('%Y-%m-%d') if source['last_seen'] else None,
+                'status': 'Active'
+            })
+        
+        return Response({
+            'sources': sources,
+            'period_days': days
+        })
+
+class StatsRecentActivityView(APIView):
+    """Activité récente (incidents et actions)"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        limit = int(request.query_params.get('limit', 10))
+        
+        # Récupérer les incidents récents
+        recent_incidents = IncidentLog.objects.select_related(
+            'email', 'playbook'
+        ).order_by('-created_at')[:limit]
+        
+        # Récupérer les playbooks récemment exécutés
+        recent_playbooks = Playbook.objects.filter(
+            execution_count__gt=0,
+            last_executed__isnull=False
+        ).order_by('-last_executed')[:5]
+        
+        # Formater les activités
+        activities = []
+        
+        # Ajouter les incidents
+        for incident in recent_incidents:
+            activity_type = 'danger' if incident.status == 'detected' else 'success'
+            activities.append({
+                'type': activity_type,
+                'title': f'Incident #{incident.id} - {incident.get_status_display()}',
+                'description': f'Email: {incident.email.subject[:50]}...',
+                'time': self._format_time_ago(incident.created_at),
+                'created_at': incident.created_at
+            })
+        
+        # Ajouter les exécutions de playbooks
+        for playbook in recent_playbooks:
+            activities.append({
+                'type': 'success',
+                'title': f'Playbook exécuté: {playbook.name}',
+                'description': f'{playbook.execution_count} exécutions totales',
+                'time': self._format_time_ago(playbook.last_executed),
+                'created_at': playbook.last_executed
+            })
+        
+        # Trier par date
+        activities.sort(key=lambda x: x['created_at'], reverse=True)
+        
+        return Response({
+            'activities': activities[:limit]
+        })
+    
+    def _format_time_ago(self, dt):
+        """Formater la date en 'il y a X temps'"""
+        now = timezone.now()
+        diff = now - dt
+        
+        if diff.days > 365:
+            years = diff.days // 365
+            return f'Il y a {years} an{"s" if years > 1 else ""}'
+        elif diff.days > 30:
+            months = diff.days // 30
+            return f'Il y a {months} mois'
+        elif diff.days > 0:
+            return f'Il y a {diff.days} jour{"s" if diff.days > 1 else ""}'
+        elif diff.seconds > 3600:
+            hours = diff.seconds // 3600
+            return f'Il y a {hours} heure{"s" if hours > 1 else ""}'
+        elif diff.seconds > 60:
+            minutes = diff.seconds // 60
+            return f'Il y a {minutes} minute{"s" if minutes > 1 else ""}'
+        else:
+            return 'À l\'instant'
+
+class StatsExportView(APIView):
+    """Export des statistiques"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        format_type = request.query_params.get('format', 'json')
+        days = int(request.query_params.get('days', 7))
+        
+        # Récupérer les données de base
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+        
+        # Compilation des données
+        stats_data = {
+            'export_date': timezone.now().isoformat(),
+            'period': {
+                'start': start_date.isoformat(),
+                'end': end_date.isoformat(),
+                'days': days
+            },
+            'summary': {
+                'total_emails': EmailMessage.objects.filter(
+                    received_date__range=[start_date, end_date]
+                ).count(),
+                'total_threats': EmailMessage.objects.filter(
+                    received_date__range=[start_date, end_date],
+                    threat_type__in=['PHISHING', 'MALWARE', 'SPAM', 'SUSPICIOUS', 'SPOOFING']
+                ).count(),
+                'quarantined_emails': QuarantineEmail.objects.filter(
+                    quarantined_at__range=[start_date, end_date]
+                ).count(),
+                'playbook_executions': Playbook.objects.aggregate(
+                    total=Sum('execution_count')
+                )['total'] or 0
+            }
+        }
+        
+        if format_type == 'csv':
+            # Générer CSV simple
+            import csv
+            from django.http import HttpResponse
+            
+            response = HttpResponse(content_type='text/csv')
+            response['Content-Disposition'] = f'attachment; filename="soar_stats_{datetime.now().strftime("%Y%m%d")}.csv"'
+            
+            writer = csv.writer(response)
+            writer.writerow(['Statistiques SOAR', f'Période: {days} jours'])
+            writer.writerow([])
+            writer.writerow(['Métrique', 'Valeur'])
+            
+            for key, value in stats_data['summary'].items():
+                writer.writerow([key.replace('_', ' ').title(), value])
+            
+            return response
+        
+        elif format_type == 'json':
+            return Response(stats_data)
+        
+        else:
+            return Response({
+                'error': 'Format non supporté. Utilisez json ou csv.'
+            }, status=400)
+        
+
+class EmailStatsView(APIView):
+    """Statistiques pour la page emails analysés"""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        # Récupérer les filtres
+        days = int(request.query_params.get('days', 7))
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+        
+        # Compter les emails par catégorie
+        safe_emails = EmailMessage.objects.filter(
+            received_date__range=[start_date, end_date],
+            threat_type='NONE',
+            threat_level='SAFE'
+        ).count()
+        
+        suspicious_emails = EmailMessage.objects.filter(
+            received_date__range=[start_date, end_date],
+            threat_type='SUSPICIOUS'
+        ).count()
+        
+        malicious_emails = EmailMessage.objects.filter(
+            received_date__range=[start_date, end_date],
+            threat_type__in=['PHISHING', 'MALWARE', 'SPAM', 'SPOOFING']
+        ).count()
+        
+        # Emails non analysés
+        unanalyzed_emails = EmailMessage.objects.filter(
+            received_date__range=[start_date, end_date],
+            analyzed=False
+        ).count()
+        
+        total_emails = safe_emails + suspicious_emails + malicious_emails + unanalyzed_emails
+        
+        return Response({
+            'period': {
+                'days': days,
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat()
+            },
+            'stats': {
+                'total': total_emails,
+                'safe': safe_emails,
+                'suspicious': suspicious_emails,
+                'malicious': malicious_emails,
+                'unanalyzed': unanalyzed_emails
+            },
+            'percentages': {
+                'safe': round((safe_emails / total_emails * 100) if total_emails > 0 else 0, 1),
+                'suspicious': round((suspicious_emails / total_emails * 100) if total_emails > 0 else 0, 1),
+                'malicious': round((malicious_emails / total_emails * 100) if total_emails > 0 else 0, 1),
+                'unanalyzed': round((unanalyzed_emails / total_emails * 100) if total_emails > 0 else 0, 1)
+            }
+        })

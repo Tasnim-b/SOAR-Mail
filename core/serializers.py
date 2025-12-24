@@ -171,16 +171,15 @@ class QuarantineEmailSerializer(serializers.ModelSerializer):
 class PlaybookRuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = PlaybookRule
-        fields = '__all__'
+        fields = ['id', 'field', 'operator', 'value', 'negate']
 
 class PlaybookActionSerializer(serializers.ModelSerializer):
     class Meta:
         model = PlaybookAction
-        fields = '__all__'
+        fields = ['id', 'action_type', 'parameters', 'order', 'delay_seconds']
 
 
 class PlaybookSerializer(serializers.ModelSerializer):
-    rules = PlaybookRuleSerializer(many=True, read_only=True)
     # Exposer `actions` comme liste simple d'identifiants (ex: 'quarantine', 'move_to_folder')
     actions = serializers.SerializerMethodField()
     # Exposer `conditions` attendues par le frontend (ex: 'phishing','malware','spam','attachment','high_risk')
@@ -188,13 +187,13 @@ class PlaybookSerializer(serializers.ModelSerializer):
     # Champ `status` pour compatibilité avec le front ('active'|'inactive')
     status = serializers.SerializerMethodField()
     created_by_email = serializers.EmailField(source='created_by.email', read_only=True)
-    
+
     class Meta:
         model = Playbook
         fields = [
             'id', 'name', 'description', 'is_active', 'status', 'priority',
             'created_at', 'updated_at', 'created_by', 'created_by_email',
-            'execution_count', 'last_executed', 'rules', 'actions', 'conditions'
+            'execution_count', 'last_executed', 'actions', 'conditions'
         ]
         read_only_fields = ['created_at', 'updated_at', 'created_by', 'execution_count', 'last_executed']
     
@@ -232,11 +231,20 @@ class PlaybookSerializer(serializers.ModelSerializer):
                         conds.add('malware')
                     elif v == 'SPAM':
                         conds.add('spam')
-            elif field == 'threat_level':
-                if 'HIGH' in value or 'CRITICAL' in value:
-                    conds.add('high_risk')
-                elif 'MEDIUM' in value:
-                    conds.add('suspicious')
+            # elif field == 'threat_level':
+            #     if 'HIGH' in value or 'CRITICAL' in value:
+            #         conds.add('high_risk')
+            #     elif 'MEDIUM' in value:
+            #         conds.add('suspicious')
+            elif field == 'risk_score':
+                    try:
+                        score = int(value)
+                        if score >= 80:
+                            conds.add('high_risk')
+                        elif score >= 40:
+                            conds.add('suspicious')
+                    except ValueError:
+                        pass
             elif field == 'has_attachments':
                 if value in ['TRUE', '1', 'YES']:
                     conds.add('attachment')

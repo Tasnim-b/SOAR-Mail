@@ -862,6 +862,39 @@
             height: 12px;
             border-radius: 50%;
         }
+        /* Dans la section <style> du template */
+.threat-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.threat-phishing {
+    background-color: rgba(248, 150, 30, 0.1);
+    color: #f8961e;
+}
+
+.threat-malware {
+    background-color: rgba(247, 37, 133, 0.1);
+    color: #f72585;
+}
+
+.threat-spam {
+    background-color: rgba(108, 117, 125, 0.1);
+    color: #6c757d;
+}
+
+.threat-suspicious {
+    background-color: rgba(76, 201, 240, 0.1);
+    color: #4cc9f0;
+}
+
+.threat-spoofing {
+    background-color: rgba(114, 9, 183, 0.1);
+    color: #7209b7;
+}
     </style>
 </head>
 <body>
@@ -1110,7 +1143,7 @@
         </div>
     </div>
     
-    <script>
+        <script>
         document.addEventListener('DOMContentLoaded', function() {
             // Éléments DOM
             const alertMessage = document.getElementById('alertMessage');
@@ -1136,7 +1169,6 @@
             let chartType = 'pie'; // 'pie' ou 'bar'
             let threatDistributionChart = null;
             let emailAnalysisChart = null;
-            let isChartInitialized = false;
             
             // Vérifier si l'utilisateur est connecté
             const accessToken = localStorage.getItem('access_token');
@@ -1179,7 +1211,7 @@
             });
             
             refreshButton.addEventListener('click', function() {
-                loadStatisticsData();
+                loadStatisticsData(currentPeriod);
             });
             
             // Gestion des boutons de période
@@ -1193,7 +1225,7 @@
                     } else {
                         customRangeDiv.style.display = 'none';
                         currentPeriod = parseInt(this.dataset.period);
-                        loadStatisticsData();
+                        loadStatisticsData(currentPeriod);
                     }
                 });
             });
@@ -1213,87 +1245,316 @@
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 
                 currentPeriod = diffDays;
-                loadStatisticsData();
+                loadStatisticsData(currentPeriod);
             });
             
             // Basculer le type de graphique
             chartTypeToggle.addEventListener('change', function() {
                 chartType = this.checked ? 'bar' : 'pie';
                 chartTypeLabel.textContent = this.checked ? 'Barres' : 'Circulaire';
-                updateThreatDistributionChart();
+                if (threatDistributionChart) {
+                    threatDistributionChart.config.type = chartType;
+                    threatDistributionChart.update();
+                    updateChartLegend();
+                }
             });
             
             // Changer la vue temporelle
             timeViewSelect.addEventListener('change', function() {
-                updateEmailAnalysisChart();
+                loadEmailTimeline(currentPeriod, this.value);
             });
             
             // Actualiser les sources de menaces
             refreshSourcesBtn.addEventListener('click', function() {
-                loadThreatSources();
+                loadThreatSources(30);
             });
             
             // Boutons d'exportation
             exportPDFBtn.addEventListener('click', function() {
                 showAlert('Export PDF en cours de préparation...', 'info');
-                // Ici, vous intégreriez une fonction d'export PDF réelle
+                // Note: L'API PDF n'est pas encore implémentée
+                setTimeout(() => {
+                    showAlert('Export PDF en cours de développement', 'warning');
+                }, 1000);
             });
             
             exportCSVBtn.addEventListener('click', function() {
-                exportData('csv');
+                window.open(`/api/stats/export/?format=csv&days=${currentPeriod}`, '_blank');
             });
             
             exportJSONBtn.addEventListener('click', function() {
-                exportData('json');
+                window.open(`/api/stats/export/?format=json&days=${currentPeriod}`, '_blank');
             });
             
             generateReportBtn.addEventListener('click', function() {
                 generateReport();
             });
             
-            // Fonction pour charger les données statistiques
-            async function loadStatisticsData() {
+            // Fonction pour charger les KPI réels
+            async function loadKPIs(days = 7) {
                 try {
-                    showLoadingState(true);
+                    const response = await fetch(`/api/stats/kpis/?days=${days}`, {
+                        headers: {
+                            'Authorization': 'Bearer ' + accessToken
+                        }
+                    });
                     
-                    // Ici, vous feriez des appels API réels
-                    // Pour la démonstration, nous utilisons des données simulées
-                    setTimeout(() => {
-                        updateKPIValues();
-                        initializeCharts();
-                        loadThreatSources();
-                        loadActivityTimeline();
-                        showLoadingState(false);
-                    }, 800);
-                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        const current = data.current_period;
+                        const trends = data.trends;
+                        
+                        // Mettre à jour les valeurs avec animation
+                        animateCounter('totalEmails', current.total_emails);
+                        animateCounter('threatsDetected', current.threats_detected);
+                        animateCounter('detectionRate', current.detection_rate, true);
+                        document.getElementById('avgResponseTime').textContent = `${current.avg_response_time}s`;
+                        
+                        // Mettre à jour les tendances
+                        updateTrend('emailsTrend', trends.total_emails);
+                        updateTrend('threatsTrend', trends.threats_detected);
+                        updateTrend('detectionTrend', trends.detection_rate);
+                        updateTrend('responseTrend', -trends.avg_response_time, true); // Négatif car temps plus court = mieux
+                    }
                 } catch (error) {
-                    console.error('Erreur lors du chargement des données:', error);
-                    showAlert('Erreur lors du chargement des statistiques', 'error');
-                    showLoadingState(false);
+                    console.error('Erreur KPI:', error);
                 }
             }
             
-            // Fonction pour mettre à jour les valeurs KPI
-            function updateKPIValues() {
-                // Données simulées
-                const totalEmails = Math.floor(Math.random() * 5000) + 10000;
-                const threatsDetected = Math.floor(totalEmails * 0.15);
-                const detectionRate = ((threatsDetected / totalEmails) * 100).toFixed(1);
-                const avgResponseTime = (Math.random() * 5 + 2).toFixed(1);
+            // Fonction pour charger la répartition des menaces
+            async function loadThreatDistribution(days = 7) {
+                try {
+                    const response = await fetch(`/api/stats/threat-distribution/?days=${days}`, {
+                        headers: {
+                            'Authorization': 'Bearer ' + accessToken
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        updateThreatDistributionChart(data);
+                    }
+                } catch (error) {
+                    console.error('Erreur répartition:', error);
+                }
+            }
+            
+            // Fonction pour mettre à jour le graphique de répartition avec les données réelles
+            function updateThreatDistributionChart(data) {
+                const ctx = document.getElementById('threatDistributionChart');
                 
-                // Mettre à jour les valeurs avec animation
-                animateCounter('totalEmails', totalEmails);
-                animateCounter('threatsDetected', threatsDetected);
-                animateCounter('detectionRate', detectionRate, true);
-                document.getElementById('avgResponseTime').textContent = `${avgResponseTime}s`;
+                // Détruire le graphique existant s'il existe
+                if (threatDistributionChart) {
+                    threatDistributionChart.destroy();
+                }
                 
-                // Tendances simulées
-                const trends = ['+12%', '-5%', '+2.3%', '-15%'];
-                const trendElements = ['emailsTrend', 'threatsTrend', 'detectionTrend', 'responseTrend'];
-                
-                trendElements.forEach((id, index) => {
-                    document.getElementById(id).textContent = trends[index];
+                threatDistributionChart = new Chart(ctx, {
+                    type: chartType,
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            data: data.data,
+                            backgroundColor: data.background_colors,
+                            borderColor: data.background_colors.map(color => color.replace('0.8', '1')),
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                backgroundColor: 'white',
+                                titleColor: '#212529',
+                                bodyColor: '#212529',
+                                borderColor: '#dee2e6',
+                                borderWidth: 1,
+                                callbacks: {
+                                    label: function(context) {
+                                        return `${context.label}: ${context.parsed} (${data.percentages[context.dataIndex]}%)`;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 });
+                
+                updateChartLegend(data);
+            }
+            
+            // Fonction pour mettre à jour la légende du graphique avec données réelles
+            function updateChartLegend(data) {
+                const legendContainer = document.getElementById('threatDistributionLegend');
+                
+                let html = '';
+                data.labels.forEach((label, index) => {
+                    html += `
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: ${data.background_colors[index]}"></div>
+                        <span>${label}</span>
+                        <span style="font-weight: 600;">${data.percentages[index]}%</span>
+                    </div>
+                    `;
+                });
+                
+                legendContainer.innerHTML = html;
+            }
+            
+            // Fonction pour charger la timeline
+            async function loadEmailTimeline(days = 7, viewType = 'daily') {
+                try {
+                    const response = await fetch(`/api/stats/email-timeline/?days=${days}&view=${viewType}`, {
+                        headers: {
+                            'Authorization': 'Bearer ' + accessToken
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        updateEmailAnalysisChart(data);
+                    }
+                } catch (error) {
+                    console.error('Erreur timeline:', error);
+                }
+            }
+            
+            // Fonction pour mettre à jour le graphique d'analyse des emails avec données réelles
+            function updateEmailAnalysisChart(data) {
+                const ctx = document.getElementById('emailAnalysisChart');
+                
+                // Détruire le graphique existant s'il existe
+                if (emailAnalysisChart) {
+                    emailAnalysisChart.destroy();
+                }
+                
+                emailAnalysisChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.labels,
+                        datasets: data.datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                                backgroundColor: 'white',
+                                titleColor: '#212529',
+                                bodyColor: '#212529',
+                                borderColor: '#dee2e6',
+                                borderWidth: 1
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.05)'
+                                },
+                                ticks: {
+                                    precision: 0
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.05)'
+                                }
+                            }
+                        },
+                        interaction: {
+                            intersect: false,
+                            mode: 'nearest'
+                        }
+                    }
+                });
+                
+                updateEmailAnalysisLegend(data.datasets);
+            }
+            
+            // Fonction pour mettre à jour la légende du graphique d'analyse
+            function updateEmailAnalysisLegend(datasets) {
+                const legendContainer = document.getElementById('emailAnalysisLegend');
+                
+                let html = '';
+                datasets.forEach(dataset => {
+                    const color = dataset.borderColor;
+                    const label = dataset.label;
+                    
+                    html += `
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: ${color}"></div>
+                        <span>${label}</span>
+                    </div>
+                    `;
+                });
+                
+                legendContainer.innerHTML = html;
+            }
+            
+            // Fonction pour charger les sources de menaces
+            async function loadThreatSources(days = 30) {
+                try {
+                    const response = await fetch(`/api/stats/threat-sources/?days=${days}`, {
+                        headers: {
+                            'Authorization': 'Bearer ' + accessToken
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        renderThreatSourcesTable(data.sources);
+                    }
+                } catch (error) {
+                    console.error('Erreur sources:', error);
+                }
+            }
+            
+            // Fonction pour charger l'activité récente
+            async function loadRecentActivity() {
+                try {
+                    const response = await fetch('/api/stats/recent-activity/', {
+                        headers: {
+                            'Authorization': 'Bearer ' + accessToken
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        renderActivityTimeline(data.activities);
+                    }
+                } catch (error) {
+                    console.error('Erreur activité:', error);
+                }
+            }
+            
+            // Fonction principale de chargement des données
+            async function loadStatisticsData(days = 7) {
+                try {
+                    showLoadingState(true);
+                    
+                    // Charger toutes les données en parallèle
+                    await Promise.all([
+                        loadKPIs(days),
+                        loadThreatDistribution(days),
+                        loadEmailTimeline(days, timeViewSelect.value),
+                        loadThreatSources(30),
+                        loadRecentActivity()
+                    ]);
+                    
+                    showLoadingState(false);
+                } catch (error) {
+                    console.error('Erreur général:', error);
+                    showAlert('Erreur lors du chargement des statistiques', 'error');
+                    showLoadingState(false);
+                }
             }
             
             // Fonction pour animer les compteurs
@@ -1327,306 +1588,31 @@
                 updateCounter();
             }
             
-            // Fonction pour initialiser les graphiques
-            function initializeCharts() {
-                if (!isChartInitialized) {
-                    createThreatDistributionChart();
-                    createEmailAnalysisChart();
-                    isChartInitialized = true;
+            // Fonction pour mettre à jour les tendances
+            function updateTrend(elementId, trendValue, isResponseTime = false) {
+                const element = document.getElementById(elementId);
+                if (trendValue > 0) {
+                    element.innerHTML = `<i class="fas fa-arrow-up trend-up"></i> +${Math.abs(trendValue)}%`;
+                    element.className = 'trend-up';
+                } else if (trendValue < 0) {
+                    const prefix = isResponseTime ? '-' : '';
+                    element.innerHTML = `<i class="fas fa-arrow-down trend-down"></i> ${prefix}${Math.abs(trendValue)}%`;
+                    element.className = 'trend-down';
                 } else {
-                    updateThreatDistributionChart();
-                    updateEmailAnalysisChart();
+                    element.innerHTML = `<i class="fas fa-minus trend-neutral"></i> 0%`;
+                    element.className = 'trend-neutral';
                 }
             }
             
-            // Fonction pour créer le graphique de répartition des menaces
-            function createThreatDistributionChart() {
-                const ctx = document.getElementById('threatDistributionChart').getContext('2d');
-                
-                const data = {
-                    labels: ['Phishing', 'Malware', 'Spam', 'Suspicious', 'Safe'],
-                    datasets: [{
-                        data: [35, 25, 20, 15, 5],
-                        backgroundColor: [
-                            'rgba(248, 150, 30, 0.8)',
-                            'rgba(247, 37, 133, 0.8)',
-                            'rgba(108, 117, 125, 0.8)',
-                            'rgba(76, 201, 240, 0.8)',
-                            'rgba(40, 167, 69, 0.8)'
-                        ],
-                        borderColor: [
-                            'rgba(248, 150, 30, 1)',
-                            'rgba(247, 37, 133, 1)',
-                            'rgba(108, 117, 125, 1)',
-                            'rgba(76, 201, 240, 1)',
-                            'rgba(40, 167, 69, 1)'
-                        ],
-                        borderWidth: 1
-                    }]
-                };
-                
-                const options = {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            backgroundColor: 'white',
-                            titleColor: '#212529',
-                            bodyColor: '#212529',
-                            borderColor: '#dee2e6',
-                            borderWidth: 1,
-                            callbacks: {
-                                label: function(context) {
-                                    return `${context.label}: ${context.parsed}%`;
-                                }
-                            }
-                        }
-                    }
-                };
-                
-                threatDistributionChart = new Chart(ctx, {
-                    type: chartType,
-                    data: data,
-                    options: options
-                });
-                
-                updateChartLegend();
-            }
-            
-            // Fonction pour mettre à jour le graphique de répartition des menaces
-            function updateThreatDistributionChart() {
-                if (!threatDistributionChart) return;
-                
-                // Mettre à jour le type de graphique
-                threatDistributionChart.config.type = chartType;
-                threatDistributionChart.update();
-                
-                updateChartLegend();
-            }
-            
-            // Fonction pour mettre à jour la légende du graphique
-            function updateChartLegend() {
-                const legendContainer = document.getElementById('threatDistributionLegend');
-                const labels = ['Phishing', 'Malware', 'Spam', 'Suspicious', 'Safe'];
-                const colors = [
-                    'rgba(248, 150, 30, 0.8)',
-                    'rgba(247, 37, 133, 0.8)',
-                    'rgba(108, 117, 125, 0.8)',
-                    'rgba(76, 201, 240, 0.8)',
-                    'rgba(40, 167, 69, 0.8)'
-                ];
-                const values = [35, 25, 20, 15, 5];
-                
-                let html = '';
-                labels.forEach((label, index) => {
-                    html += `
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: ${colors[index]}"></div>
-                        <span>${label}</span>
-                        <span style="font-weight: 600;">${values[index]}%</span>
-                    </div>
-                    `;
-                });
-                
-                legendContainer.innerHTML = html;
-            }
-            
-            // Fonction pour créer le graphique d'analyse des emails dans le temps
-            function createEmailAnalysisChart() {
-                const ctx = document.getElementById('emailAnalysisChart').getContext('2d');
-                
-                // Générer des données pour les 7 derniers jours
-                const labels = [];
-                const safeData = [];
-                const suspiciousData = [];
-                const maliciousData = [];
-                
-                for (let i = 6; i >= 0; i--) {
-                    const date = new Date();
-                    date.setDate(date.getDate() - i);
-                    labels.push(date.toLocaleDateString('fr-FR', { weekday: 'short' }));
-                    
-                    safeData.push(Math.floor(Math.random() * 200) + 300);
-                    suspiciousData.push(Math.floor(Math.random() * 50) + 30);
-                    maliciousData.push(Math.floor(Math.random() * 30) + 10);
-                }
-                
-                const data = {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Sûrs',
-                            data: safeData,
-                            backgroundColor: 'rgba(40, 167, 69, 0.5)',
-                            borderColor: 'rgba(40, 167, 69, 1)',
-                            borderWidth: 2,
-                            tension: 0.4
-                        },
-                        {
-                            label: 'Suspects',
-                            data: suspiciousData,
-                            backgroundColor: 'rgba(76, 201, 240, 0.5)',
-                            borderColor: 'rgba(76, 201, 240, 1)',
-                            borderWidth: 2,
-                            tension: 0.4
-                        },
-                        {
-                            label: 'Malveillants',
-                            data: maliciousData,
-                            backgroundColor: 'rgba(247, 37, 133, 0.5)',
-                            borderColor: 'rgba(247, 37, 133, 1)',
-                            borderWidth: 2,
-                            tension: 0.4
-                        }
-                    ]
-                };
-                
-                const options = {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                            backgroundColor: 'white',
-                            titleColor: '#212529',
-                            bodyColor: '#212529',
-                            borderColor: '#dee2e6',
-                            borderWidth: 1
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.05)'
-                            },
-                            ticks: {
-                                precision: 0
-                            }
-                        },
-                        x: {
-                            grid: {
-                                color: 'rgba(0, 0, 0, 0.05)'
-                            }
-                        }
-                    },
-                    interaction: {
-                        intersect: false,
-                        mode: 'nearest'
-                    }
-                };
-                
-                emailAnalysisChart = new Chart(ctx, {
-                    type: 'line',
-                    data: data,
-                    options: options
-                });
-                
-                updateEmailAnalysisLegend();
-            }
-            
-            // Fonction pour mettre à jour le graphique d'analyse des emails
-            function updateEmailAnalysisChart() {
-                if (!emailAnalysisChart) return;
-                
-                const viewType = timeViewSelect.value;
-                let labels = [];
-                let safeData = [];
-                let suspiciousData = [];
-                let maliciousData = [];
-                
-                if (viewType === 'daily') {
-                    // Données quotidiennes pour 7 jours
-                    for (let i = 6; i >= 0; i--) {
-                        const date = new Date();
-                        date.setDate(date.getDate() - i);
-                        labels.push(date.toLocaleDateString('fr-FR', { weekday: 'short' }));
-                        
-                        safeData.push(Math.floor(Math.random() * 200) + 300);
-                        suspiciousData.push(Math.floor(Math.random() * 50) + 30);
-                        maliciousData.push(Math.floor(Math.random() * 30) + 10);
-                    }
-                } else if (viewType === 'weekly') {
-                    // Données hebdomadaires pour 8 semaines
-                    for (let i = 7; i >= 0; i--) {
-                        labels.push(`S${8-i}`);
-                        safeData.push(Math.floor(Math.random() * 1000) + 1500);
-                        suspiciousData.push(Math.floor(Math.random() * 300) + 200);
-                        maliciousData.push(Math.floor(Math.random() * 150) + 80);
-                    }
-                } else if (viewType === 'monthly') {
-                    // Données mensuelles pour 6 mois
-                    const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
-                    const currentMonth = new Date().getMonth();
-                    
-                    for (let i = 5; i >= 0; i--) {
-                        const monthIndex = (currentMonth - i + 12) % 12;
-                        labels.push(months[monthIndex]);
-                        
-                        safeData.push(Math.floor(Math.random() * 3000) + 5000);
-                        suspiciousData.push(Math.floor(Math.random() * 1000) + 800);
-                        maliciousData.push(Math.floor(Math.random() * 500) + 300);
-                    }
-                }
-                
-                emailAnalysisChart.data.labels = labels;
-                emailAnalysisChart.data.datasets[0].data = safeData;
-                emailAnalysisChart.data.datasets[1].data = suspiciousData;
-                emailAnalysisChart.data.datasets[2].data = maliciousData;
-                emailAnalysisChart.update();
-                
-                updateEmailAnalysisLegend();
-            }
-            
-            // Fonction pour mettre à jour la légende du graphique d'analyse
-            function updateEmailAnalysisLegend() {
-                const legendContainer = document.getElementById('emailAnalysisLegend');
-                const datasets = emailAnalysisChart?.data?.datasets || [];
-                
-                let html = '';
-                datasets.forEach(dataset => {
-                    const color = dataset.borderColor;
-                    const label = dataset.label;
-                    
-                    html += `
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: ${color}"></div>
-                        <span>${label}</span>
-                    </div>
-                    `;
-                });
-                
-                legendContainer.innerHTML = html;
-            }
-            
-            // Fonction pour charger les sources de menaces
-            function loadThreatSources() {
-                // Données simulées
-                const threatSources = [
-                    { domain: 'phishing-paypal.com', type: 'Phishing', count: 142, lastSeen: '2023-10-25', status: 'Active' },
-                    { domain: 'microsoft-update.net', type: 'Malware', count: 98, lastSeen: '2023-10-24', status: 'Bloqué' },
-                    { domain: 'amazon-security.xyz', type: 'Phishing', count: 76, lastSeen: '2023-10-23', status: 'Active' },
-                    { domain: 'darkweb-hacker.ru', type: 'Malware', count: 65, lastSeen: '2023-10-22', status: 'Surveillé' },
-                    { domain: 'free-gifts-promo.com', type: 'Spam', count: 54, lastSeen: '2023-10-21', status: 'Bloqué' },
-                    { domain: 'secure-banking.tech', type: 'Phishing', count: 43, lastSeen: '2023-10-20', status: 'Active' },
-                    { domain: 'crypto-investment.io', type: 'Suspicious', count: 32, lastSeen: '2023-10-19', status: 'Surveillé' },
-                    { domain: 'netflix-renewal.co', type: 'Phishing', count: 28, lastSeen: '2023-10-18', status: 'Bloqué' }
-                ];
-                
+            // Fonction pour afficher les sources de menaces dans le tableau
+            function renderThreatSourcesTable(sources) {
                 const tbody = document.getElementById('threatSourcesBody');
                 let html = '';
                 
-                threatSources.forEach(source => {
-                    const domainIcon = getDomainIcon(source.domain);
+                sources.forEach(source => {
+                    const domainIcon = getDomainIcon(source.sender);
                     const statusClass = getStatusClass(source.status);
-                    const lastSeenFormatted = formatDate(source.lastSeen);
+                    const threatClass = getThreatClass(source.threat_type);
                     
                     html += `
                     <tr>
@@ -1636,21 +1622,21 @@
                                     <i class="fas ${domainIcon}"></i>
                                 </div>
                                 <div>
-                                    <div style="font-weight: 600;">${source.domain}</div>
-                                    <div style="font-size: 12px; color: var(--gray);">${getDomainType(source.domain)}</div>
+                                    <div style="font-weight: 600;">${source.sender_name}</div>
+                                    <div style="font-size: 12px; color: var(--gray);">${source.sender}</div>
                                 </div>
                             </div>
                         </td>
                         <td>
-                            <span class="threat-badge ${getThreatClass(source.type)}">${source.type}</span>
+                            <span class="threat-badge ${threatClass}">${source.threat_type}</span>
                         </td>
                         <td>
                             <span class="threat-count">${source.count}</span>
                             <div class="progress-bar">
-                                <div class="progress-fill" style="width: ${Math.min(source.count / 1.5, 100)}%"></div>
+                                <div class="progress-fill" style="width: ${Math.min(source.count * 5, 100)}%"></div>
                             </div>
                         </td>
-                        <td>${lastSeenFormatted}</td>
+                        <td>${formatDate(source.last_seen)}</td>
                         <td><span class="${statusClass}">${source.status}</span></td>
                     </tr>
                     `;
@@ -1659,17 +1645,8 @@
                 tbody.innerHTML = html;
             }
             
-            // Fonction pour charger la timeline d'activité
-            function loadActivityTimeline() {
-                // Données simulées
-                const activities = [
-                    { type: 'success', title: 'Nouveau playbook activé', description: 'Playbook "Réponse automatique au phishing" activé avec succès', time: 'Il y a 2 heures' },
-                    { type: 'warning', title: 'Pic d\'activité suspecte détecté', description: 'Augmentation de 45% des emails suspects provenant de nouveaux domaines', time: 'Il y a 5 heures' },
-                    { type: 'danger', title: 'Attaque de phishing majeure', description: 'Tentative de phishing ciblant les informations bancaires détectée et bloquée', time: 'Il y a 1 jour' },
-                    { type: 'success', title: 'Mise à jour des règles de détection', description: 'Les règles de détection ont été mises à jour avec un taux de faux positifs réduit de 12%', time: 'Il y a 2 jours' },
-                    { type: 'success', title: 'Rapport mensuel généré', description: 'Rapport de sécurité pour le mois d\'octobre 2023 généré automatiquement', time: 'Il y a 3 jours' }
-                ];
-                
+            // Fonction pour afficher la timeline d'activité
+            function renderActivityTimeline(activities) {
                 const timelineContainer = document.getElementById('activityTimeline');
                 let html = '';
                 
@@ -1690,16 +1667,6 @@
                 });
                 
                 timelineContainer.innerHTML = html;
-            }
-            
-            // Fonction pour exporter les données
-            function exportData(format) {
-                showAlert(`Export ${format.toUpperCase()} en cours de préparation...`, 'info');
-                
-                // Simulation d'export
-                setTimeout(() => {
-                    showAlert(`Données exportées en ${format.toUpperCase()} avec succès`, 'success');
-                }, 1500);
             }
             
             // Fonction pour générer un rapport
@@ -1768,7 +1735,8 @@
             }
             
             // Fonctions utilitaires
-            function getDomainIcon(domain) {
+            function getDomainIcon(email) {
+                const domain = email.split('@')[1] || '';
                 if (domain.includes('paypal')) return 'fa-credit-card';
                 if (domain.includes('microsoft')) return 'fa-windows';
                 if (domain.includes('amazon')) return 'fa-shopping-cart';
@@ -1778,20 +1746,13 @@
                 return 'fa-globe';
             }
             
-            function getDomainType(domain) {
-                if (domain.endsWith('.com')) return 'Domaine commercial';
-                if (domain.endsWith('.net')) return 'Réseau';
-                if (domain.endsWith('.org')) return 'Organisation';
-                if (domain.endsWith('.ru')) return 'Russie';
-                if (domain.endsWith('.io')) return 'Technologie';
-                return 'Domaine générique';
-            }
-            
             function getThreatClass(type) {
                 switch(type) {
-                    case 'Phishing': return 'threat-phishing';
-                    case 'Malware': return 'threat-malware';
-                    case 'Spam': return 'threat-spam';
+                    case 'PHISHING': return 'threat-phishing';
+                    case 'MALWARE': return 'threat-malware';
+                    case 'SPAM': return 'threat-spam';
+                    case 'SUSPICIOUS': return 'threat-suspicious';
+                    case 'SPOOFING': return 'threat-spoofing';
                     default: return 'threat-suspicious';
                 }
             }
@@ -1806,6 +1767,7 @@
             }
             
             function formatDate(dateString) {
+                if (!dateString) return 'N/A';
                 const date = new Date(dateString);
                 return date.toLocaleDateString('fr-FR', {
                     day: '2-digit',
@@ -1816,7 +1778,7 @@
             
             // Rafraîchir les données toutes les 10 minutes
             setInterval(() => {
-                loadStatisticsData();
+                loadStatisticsData(currentPeriod);
             }, 600000);
         });
     </script>

@@ -50,8 +50,8 @@ urlpatterns = [
     path('api/playbooks/<int:id>/toggle-active/', PlaybookToggleActiveView.as_view(), name='playbook-toggle-active'),
     path('api/playbooks/<int:id>/test/', PlaybookTestView.as_view(), name='playbook-test'),
     path('api/playbooks/stats/', PlaybookStatsView.as_view(), name='playbook-stats'),
-    path('api/playbooks/rules/create/', PlaybookRuleCreateView.as_view(), name='playbook-rule-create'),
-    path('api/playbooks/actions/create/', PlaybookActionCreateView.as_view(), name='playbook-action-create'),
+    path('api/playbooks/<int:playbook_id>/rules/create/', PlaybookRuleCreateView.as_view(), name='playbook-rule-create'),
+    path('api/playbooks/<int:playbook_id>/actions/create/', PlaybookActionCreateView.as_view(), name='playbook-action-create'),
 
     # API Incidents
     path('api/incidents/', IncidentLogListView.as_view(), name='incident-list'),
@@ -67,10 +67,15 @@ urlpatterns = [
     path('api/quarantine/bulk-delete/', views.BulkDeleteQuarantineView.as_view(), name='bulk-delete-quarantine'),
     
     path('statistiques/', views.statistiques_page, name='statistiques_page'),
+        
+    # API Statistiques
+    path('api/stats/kpis/', views.StatsKPIsView.as_view(), name='stats-kpis'),
+    path('api/stats/threat-distribution/', views.StatsThreatDistributionView.as_view(), name='stats-threat-distribution'),
+    path('api/stats/email-timeline/', views.StatsEmailTimelineView.as_view(), name='stats-email-timeline'),
+    path('api/stats/threat-sources/', views.StatsThreatSourcesView.as_view(), name='stats-threat-sources'),
+    path('api/stats/recent-activity/', views.StatsRecentActivityView.as_view(), name='stats-recent-activity'),
+    path('api/stats/export/', views.StatsExportView.as_view(), name='stats-export'),
+    path('api/emails/stats/', views.EmailStatsView.as_view(), name='email-stats'),
 
 
-
-    
-   
-  
 ]

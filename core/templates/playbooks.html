@@ -1658,14 +1658,16 @@ async function createPlaybookRule(playbookId, condition) {
         'spam': { field: 'threat_type', operator: 'in', value: 'SPAM' },
         'high_risk': { field: 'risk_score', operator: 'gte', value: '80' },
         'suspicious': { field: 'risk_score', operator: 'gte', value: '40' },
-        'attachment': { field: 'has_attachments', operator: 'equals', value: 'true' }
+        'attachment': { field: 'has_attachments', operator: 'equals', value: 'true' },
+        'blacklist': { field: 'sender', operator: 'contains', value: 'blacklist' },
+        'urgent': { field: 'subject', operator: 'regex', value: '(urgent|important|immédiat)' }
     };
     
     const rule = ruleMap[condition];
     if (!rule) return;
     
     try {
-        await fetch(`/api/playbooks/${playbookId}/rules/create/`, {
+        await fetch(`/api/playbooks/${playbookId}/rules/create/`, {  
             method: 'POST',
             headers: {
                 'Authorization': 'Bearer ' + accessToken,
@@ -1680,7 +1682,7 @@ async function createPlaybookRule(playbookId, condition) {
 
  async function createPlaybookAction(playbookId, actionType, order) {
     try {
-        await fetch(`/api/playbooks/${playbookId}/actions/create/`, {
+        await fetch(`/api/playbooks/${playbookId}/actions/create/`, {  
             method: 'POST',
             headers: {
                 'Authorization': 'Bearer ' + accessToken,
