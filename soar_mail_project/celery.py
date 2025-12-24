@@ -19,3 +19,8 @@ app.autodiscover_tasks()# Define a debug task
 @app.task(bind=True)
 def debug_task(self):
     print(f'Request: {self.request!r}')
+
+
+# celery -A soar_mail_project worker --loglevel=info --pool=solo
+
+#celery -A soar_mail_project beat --loglevel=info
